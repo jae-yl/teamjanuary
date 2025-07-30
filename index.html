@@ -4,10 +4,49 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Vite App</title>
+    <title> Team January </title>
   </head>
-  <body>
-    <div id="app"></div>
+  <body class="row">
+
+    <!---------------------- Spotify Playlist -------------------------->
+    <div class="col align-self-center cwc">
+      <div class="card" id="spotify-playlist-column">
+        <h1> Spotify Playlist </h1>
+        <div class="card-body">
+          <p class="card-text">This is where the Spotify playlist will be embedded</p>
+        </div>
+      </div>
+      <button> Find Match </button>
+    </div>
+
+    <!---------------------- Chat List -------------------------->
+    <div class="col align-self-start">
+
+      <div class="container">
+        <div class="row row-cols-1" id="chat-list-column">
+
+          <div class="card col">
+            <h1> Chat 1 </h1>
+          </div>
+
+          <div class="card col">
+            <h1> Chat 2 </h1>
+          </div>
+
+        </div>
+      </div>
+      
+    </div>
+
+    <!---------------------- Chat Window -------------------------->
+    <div class="col align-self-center cwc">
+      <div class="card" id="chat-window-column">
+        <h1> Chat Window </h1>
+        <div class="card-body">
+          <p class="card-text">This is where the chat for the selected user will appear</p>
+        </div>
+    </div>
+
     <script type="module" src="/src/main.js"></script>
   </body>
 </html>
