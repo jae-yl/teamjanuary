@@ -1,26 +1,49 @@
 import './style.css'
 import 'bootstrap/dist/css/bootstrap.min.css'
 import 'bootstrap/dist/js/bootstrap.bundle.min.js'
-import javascriptLogo from './javascript.svg'
-import viteLogo from '/vite.svg'
-import { setupCounter } from './counter.js'
+import { io } from "socket.io-client";
 
-document.querySelector('#app').innerHTML = `
-  <div>
-    <a href="https://vite.dev" target="_blank">
-      <img src="${viteLogo}" class="logo" alt="Vite logo" />
-    </a>
-    <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript" target="_blank">
-      <img src="${javascriptLogo}" class="logo vanilla" alt="JavaScript logo" />
-    </a>
-    <h1>Hello Vite!</h1>
-    <div class="card">
-      <button id="counter" type="button"></button>
-    </div>
-    <p class="read-the-docs">
-      Click on the Vite logo to learn more
-    </p>
-  </div>
-`
 
-setupCounter(document.querySelector('#counter'))
+const socket = io("http://localhost:3000");
+
+// Create chat UI container
+const chatContainer = document.createElement("div");
+chatContainer.classList.add("p-2"); // Optional padding
+chatContainer.innerHTML = `
+  <h5>Chat</h5>
+  <input type="text" id="username" placeholder="Your name" class="form-control mb-2" />
+  <input type="text" id="messageInput" placeholder="Your message..." class="form-control mb-2" />
+  <button class="btn btn-primary mb-3" id="sendBtn">Send</button>
+  <ul id="messages" class="list-group"></ul>
+`;
+
+// Inject chat UI into the existing chat window
+const chatWindowBody = document.querySelector("#chat-window-column .card-body");
+chatWindowBody.appendChild(chatContainer);
+
+// Setup chat functionality
+const usernameInput = document.getElementById("username");
+const messageInput = document.getElementById("messageInput");
+const sendBtn = document.getElementById("sendBtn");
+const messages = document.getElementById("messages");
+
+sendBtn.addEventListener("click", () => {
+  const user = usernameInput.value.trim();
+  const msg = messageInput.value.trim();
+  if (user && msg) {
+    socket.emit("send_message", { user, msg });
+    appendMessage(`You: ${msg}`);
+    messageInput.value = "";
+  }
+});
+
+socket.on("receive_message", (data) => {
+  appendMessage(`${data.user}: ${data.msg}`);
+});
+
+function appendMessage(text) {
+  const li = document.createElement("li");
+  li.className = "list-group-item";
+  li.textContent = text;
+  messages.appendChild(li);
+}
