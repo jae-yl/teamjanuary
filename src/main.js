@@ -3,7 +3,6 @@ import 'bootstrap/dist/css/bootstrap.min.css'
 import 'bootstrap/dist/js/bootstrap.bundle.min.js'
 import { io } from "socket.io-client";
 
-
 const socket = io("http://localhost:3000");
 
 // Create chat UI container

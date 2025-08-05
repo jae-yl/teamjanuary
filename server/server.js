@@ -4,6 +4,16 @@ import http from 'http';
 import cors from 'cors';
 import { Server } from 'socket.io';
 
+
+import { Client } from 'pg';
+const client = new Client({connectionString: process.env.DATABASE_URL})
+
+await client.connect()
+const res = await client.query('SELECT * FROM ud')
+console.log(res.rows[0])
+await client.end()
+
+
 const app = express();
 const server = http.createServer(app);
 
