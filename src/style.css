@@ -3,6 +3,10 @@ body {
   height: 100vh;
 }
 
+div.row {
+  margin: 0px;
+}
+
 #chat-list-column {
   padding-top: 15px;
   padding-bottom: 15px;

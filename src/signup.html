@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="/style.css">
+    <title> VibeMatch </title>
+  </head>
+  <body>
+    <div class="d-flex justify-content-center align-items-center vh-100">
+        <div class="card p-5" style="width: 400px;">
+            <h2 class="card-title text-center mb-4"> Sign Up </h2>
+            <form id="login-form">
+                <div class="mb-3">
+                    <label for="usernameInput" class="form-label"> Username </label>
+                    <input type="username" class="form-control" id="usernameInput" placeholder="Username">
+                </div>
+                <div class="mb-4">
+                    <label for="passwordInput" class="form-label"> Password </label>
+                    <input type="password" class="form-control" id="passwordInput" placeholder="Password">
+                </div>
+                <button type="submit" class="btn btn-primary w-100">Log In</button>
+            </form>
+            <p class="mt-3 text-center">
+                Have an account? <a href="/index.html"> Log in here </a>
+            </p>
+        </div>
+        <div class="card p-5 m-3" style="width: 400px;">
+            <h2 class="card-title text-center mb-4"> Or sign in with spotify </h2>
+            <a href="/dashboard.html"> Go to dashboard </a>
+        </div>
+    </div>
+  </body>
+  <script lang="js" type="module">
+    import 'bootstrap/dist/css/bootstrap.min.css'
+    import 'bootstrap/dist/js/bootstrap.bundle.min.js'
+
+    document.getElementById("login-form").addEventListener('submit', function(event) {
+        event.preventDefault();
+
+        let loginData = {
+            username: event.target.elements['usernameInput'].value,
+            password: event.target.elements['passwordInput'].value
+        }
+        
+        fetch('http://localhost:3000/signup', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(loginData)
+        }).then(response => {
+            if (!response.ok) {
+                throw new Error('Network response was not ok ' + response.statusText);
+            }
+            return response.json();
+        }).then(data => {
+            console.log('results:', data);
+        }).catch(error => {
+            console.log('Fetch error:', error);
+        })
+    });
+
+  </script>
+</html>

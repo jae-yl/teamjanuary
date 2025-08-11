@@ -1,4 +1,3 @@
-import '/src/assets/style.css'
 import 'bootstrap/dist/css/bootstrap.min.css'
 import 'bootstrap/dist/js/bootstrap.bundle.min.js'
 import { io } from "socket.io-client";
@@ -46,3 +45,7 @@ function appendMessage(text) {
   li.textContent = text;
   messages.appendChild(li);
 }
+
+document.getElementById("profile-pic-banner").addEventListener('click', function() {
+  console.log("clicked");
+});
