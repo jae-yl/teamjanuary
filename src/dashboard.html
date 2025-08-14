@@ -5,50 +5,51 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="stylesheet" href="/style.css">
-    <title> VibeMatch </title>
+    <title>VibeMatch</title>
   </head>
   <body>
-    
+
+    <!-- Top banner -->
     <div class="row">
-      <button id="profile-pic-banner" class="float-end"> pfp top right </button>
+      <button id="profile-pic-banner" class="float-end">pfp top right</button>
     </div>
+
     <div class="row">
-      <!---------------------- Spotify Playlist -------------------------->
+      <!-- LEFT: Spotify Playlist -->
       <div class="col align-self-center cwc">
         <div class="card" id="spotify-playlist-column">
-          <h1> Spotify Playlist </h1>
+          <h1>Spotify Playlist</h1>
           <div class="card-body">
             <p class="card-text">This is where the Spotify playlist will be embedded</p>
           </div>
         </div>
-        <button id="findMatchButton"> Find Match </button>
+        <button id="findMatchButton">Find Match</button>
       </div>
 
-      <!---------------------- Chat List -------------------------->
+      <!-- MIDDLE: Chat List -->
       <div class="col align-self-start">
-
         <div class="container">
           <div class="row row-cols-1" id="chat-list-column">
-
             <div class="card col">
-              <h1> Chat 1 </h1>
+              <h1>Chat 1</h1>
             </div>
-
             <div class="card col">
-              <h1> Chat 2 </h1>
+              <h1>Chat 2</h1>
             </div>
-
           </div>
         </div>
-        
       </div>
 
-      <!---------------------- Chat Window -------------------------->
+      <!-- RIGHT: Chat Window -->
       <div class="col align-self-center cwc">
         <div class="card" id="chat-window-column">
-          <h1> Chat Window </h1>
+          <h1>Chat Window</h1>
           <div class="card-body">
-          </div>
+            <!-- Chat message list -->
+            <div id="chat-messages" style="max-height: 400px; overflow-y: auto;"></div>
+
+        
+        </div>
       </div>
     </div>
 

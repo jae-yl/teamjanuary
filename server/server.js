@@ -8,71 +8,60 @@ import { Server } from 'socket.io';
 import * as argon2 from 'argon2';
 
 import { Pool } from 'pg';
-let pool = new Pool({connectionString: process.env.DATABASE_URL});
+const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
 import connectPgSimple from 'connect-pg-simple';
-
 const pgSession = connectPgSimple(session);
 
 const app = express();
 app.use(express.static("src"));
 
-// for http requests
+// Allow cross-origin requests for front-end dev
 app.use(cors({
-    origin: ["http://localhost:5173"],
-    methods: ["GET", "POST"],
-    credentials: true
+  origin: ["http://localhost:5173"],
+  methods: ["GET", "POST"],
+  credentials: true
 }));
 
-// sessions (cookies) middleware
+// Session middleware
 app.use(session({
   store: new pgSession({
-    pool: pool,
+    pool,
     tableName: 'session'
   }),
   secret: env.SESSION_SECRET,
-  resave: false, // Prevents unnecessary session saves if the session wasn't modified
-  saveUninitialized: false, // Prevents a session from being created for anonymous users
+  resave: false,
+  saveUninitialized: false,
   cookie: {
-      httpOnly: true, // Prevents client-side JavaScript from accessing the cookie
-      secure: false, // In production, this should be true and your server should be on HTTPS
-      maxAge: 1000 * 60 * 60 * 12 // Cookie will expire in 12 hours
+    httpOnly: true,
+    secure: false,
+    maxAge: 1000 * 60 * 60 * 12
   }
 }));
+
 app.use(express.json());
+
+// ──────────────── ROUTES ────────────────
 
 app.post("/signup", async (req, res) => {
   try {
-    let body = req.body;
+    const { username, password } = req.body;
+    if (!username || !password) throw new Error("Username and password are required");
 
-    if (!body.hasOwnProperty("username") || !body.hasOwnProperty("password")) {
-      throw new Error("Username and password are required");
-    }
-
-    // Check if the username is valid (doesn't exist already)
-    let existingUser = await pool.query("SELECT * FROM ud WHERE username = $1;", [body['username']]);
-
-    if (existingUser.rows.length > 0) {
+    const userCheck = await pool.query("SELECT * FROM ud WHERE username = $1", [username]);
+    if (userCheck.rows.length > 0) {
       return res.status(400).json({ error: "Username already exists", where: 'username' });
     }
 
-    let hashedPassword = await argon2.hash(body['password']);
-    console.log(hashedPassword);
-    // Insert the new user into the database
-    await pool.query("INSERT INTO ud (username, pwd) VALUES ($1, $2);", [body['username'], hashedPassword]);
+    const hashedPassword = await argon2.hash(password);
+    await pool.query("INSERT INTO ud (username, pwd) VALUES ($1, $2)", [username, hashedPassword]);
 
-    // Set session user
-    req.session.user = {
-      id: body['username']
-    };
-
-    req.session.save(e => {
-      if (e) {
-        return res.status(500).json({ error: "Could not save session" });
-      } else {
-        return res.status(200).json({});
-      }
+    req.session.user = { id: username };
+    req.session.save(err => {
+      if (err) return res.status(500).json({ error: "Could not save session" });
+      return res.status(200).json({});
     });
+
   } catch (e) {
     return res.status(400).json({ error: e.message, where: 'post' });
   }
@@ -80,58 +69,35 @@ app.post("/signup", async (req, res) => {
 
 app.post("/login", async (req, res) => {
   try {
-    let body = req.body;
+    const { username, password } = req.body;
+    if (!username || !password) throw new Error("Username and password are required");
 
-    if (!body.hasOwnProperty("username") || !body.hasOwnProperty("password")) {
-      throw new Error("Username and password are required");
-    }
-
-    // Check if the username exists
-    let user = await pool.query("SELECT * FROM ud WHERE username = $1;", [body['username']]);
-
-    if (user.rows.length === 0) {
+    const result = await pool.query("SELECT * FROM ud WHERE username = $1", [username]);
+    if (result.rows.length === 0) {
       return res.status(400).json({ error: "Username does not exist", where: 'username' });
     }
 
-    // Verify the password
-    let isValidPassword = await argon2.verify(user.rows[0].pwd, body['password']);
-
-    if (!isValidPassword) {
+    const user = result.rows[0];
+    const isValid = await argon2.verify(user.pwd, password);
+    if (!isValid) {
       return res.status(400).json({ error: "Invalid password", where: 'password' });
     }
 
-    // Set session user
-    req.session.user = {
-      id: body['username']
-    };
-
-    req.session.save(e => {
-      if (e) {
-        return res.status(500).json({ error: "Could not save session" });
-      } else {
-        console.log(req.session);
-        return res.status(200).json({});
-      }
+    req.session.user = { id: username };
+    req.session.save(err => {
+      if (err) return res.status(500).json({ error: "Could not save session" });
+      return res.status(200).json({});
     });
+
   } catch (e) {
     return res.status(400).json({ error: e.message, where: 'post' });
   }
 });
 
-app.post("/findmatch", async (req, res) => {
+app.post("/logout", (req, res) => {
   try {
-    console.log(req.session);
-  } catch (e) {
-    return res.status(400).json({ error: e.message });
-  }
-});
-
-app.post("/logout", async (req, res) => {
-  try {
-    req.session.destroy(e => {
-      if (e) {
-        return res.status(500).json({ error: "Could not log out" });
-      }
+    req.session.destroy(err => {
+      if (err) return res.status(500).json({ error: "Could not log out" });
       return res.status(200).json({ message: "Logged out successfully" });
     });
   } catch (e) {
@@ -139,7 +105,17 @@ app.post("/logout", async (req, res) => {
   }
 });
 
-// for websocket server
+app.post("/findmatch", (req, res) => {
+  try {
+    console.log("Session data:", req.session);
+    res.status(200).json({ status: "ok" });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+// ──────────────── SOCKET.IO ────────────────
+
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
@@ -151,8 +127,17 @@ const io = new Server(server, {
 io.on("connection", (socket) => {
   console.log("User connected:", socket.id);
 
+  socket.on("join_room", (room) => {
+    socket.join(room);
+    console.log(`Socket ${socket.id} joined room ${room}`);
+  });
+
   socket.on("send_message", (data) => {
-    socket.broadcast.emit("receive_message", data);
+    const { room, user, msg } = data;
+    if (!room || !user || !msg) return;
+
+    io.to(room).emit("receive_message", { user, msg });
+    console.log(`[Room ${room}] ${user}: ${msg}`);
   });
 
   socket.on("disconnect", () => {
@@ -160,6 +145,8 @@ io.on("connection", (socket) => {
   });
 });
 
+// ──────────────── SERVER ────────────────
+
 server.listen(3000, () => {
-  console.log("Server running on http://localhost:3000");
+  console.log("Server running at http://localhost:3000");
 });

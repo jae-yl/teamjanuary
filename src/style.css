@@ -30,3 +30,70 @@ div.row {
 .alert {
   margin-bottom: 0px !important;
 }
+
+.chat-bubble {
+  border-radius: 16px;
+  padding: 10px 15px;
+  margin: 5px;
+  max-width: 70%;
+  clear: both;
+  display: inline-block;
+  word-wrap: break-word;
+}
+
+.sent {
+  background-color: #007aff;
+  color: white;
+  float: right;
+  text-align: right;
+}
+
+.received {
+  background-color: #f0f0f0;
+  color: black;
+  float: left;
+  text-align: left;
+}
+
+/* Fix parent container layout for messages */
+#messages {
+  display: flex;
+  flex-direction: column;
+  padding: 10px;
+  overflow-y: auto;
+  height: 100%;
+}
+
+/* Ensure messages list has no bullet styles */
+#messages li {
+  list-style: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+}
+
+/* Allow bubbles to align left or right properly */
+#messages li .chat-bubble.sent {
+  align-self: flex-end;
+}
+
+#messages li .chat-bubble.received {
+  align-self: flex-start;
+}
+
+/* Ensure input field doesn't overlap */
+#message-form {
+  display: flex;
+  flex-direction: column;
+  margin-top: 10px;
+}
+
+input[name="message"] {
+  margin-bottom: 5px;
+}
+
+/* Optional: ensure smooth bubble spacing */
+#messages li + li {
+  margin-top: 4px;
+}
