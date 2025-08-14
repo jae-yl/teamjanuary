@@ -47,5 +47,47 @@ function appendMessage(text) {
 }
 
 document.getElementById("profile-pic-banner").addEventListener('click', function() {
-  console.log("clicked");
+  fetch('http://localhost:3000/logout', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    credentials: 'include'
+  }).then(response => {
+
+    if (!response.ok) {
+      return response.json().then(e => {
+        throw new Error(e.error);
+      });
+    }
+
+    return response.json();
+  }).then(data => {
+    window.location.href = "./index.html?m=lO";
+  }).catch(error => {
+    console.log('Fetch error:', error);
+  });
 });
+
+document.getElementById('findMatchButton').addEventListener('click', function() {
+  fetch('http://localhost:3000/findmatch', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    credentials: 'include'
+  }).then(response => {
+
+    if (!response.ok) {
+      return response.json().then(e => {
+        throw new Error(e.error);
+      });
+    }
+
+    return response.json();
+  }).then(data => {
+
+  }).catch(error => {
+    console.log('Fetch error:', error);
+  });
+})

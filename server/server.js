@@ -10,21 +10,36 @@ import * as argon2 from 'argon2';
 import { Pool } from 'pg';
 let pool = new Pool({connectionString: process.env.DATABASE_URL});
 
+import connectPgSimple from 'connect-pg-simple';
+
+const pgSession = connectPgSimple(session);
+
 const app = express();
 app.use(express.static("src"));
-app.use(express.json());
+
+// for http requests
+app.use(cors({
+    origin: ["http://localhost:5173"],
+    methods: ["GET", "POST"],
+    credentials: true
+}));
 
 // sessions (cookies) middleware
 app.use(session({
-    secret: env.SESSION_SECRET,
-    resave: false, // Prevents unnecessary session saves if the session wasn't modified
-    saveUninitialized: false, // Prevents a session from being created for anonymous users
-    cookie: {
-        httpOnly: true, // Prevents client-side JavaScript from accessing the cookie
-        secure: false, // In production, this should be true and your server should be on HTTPS
-        maxAge: 1000 * 60 * 60 * 12 // Cookie will expire in 12 hours
-    }
+  store: new pgSession({
+    pool: pool,
+    tableName: 'session'
+  }),
+  secret: env.SESSION_SECRET,
+  resave: false, // Prevents unnecessary session saves if the session wasn't modified
+  saveUninitialized: false, // Prevents a session from being created for anonymous users
+  cookie: {
+      httpOnly: true, // Prevents client-side JavaScript from accessing the cookie
+      secure: false, // In production, this should be true and your server should be on HTTPS
+      maxAge: 1000 * 60 * 60 * 12 // Cookie will expire in 12 hours
+  }
 }));
+app.use(express.json());
 
 app.post("/signup", async (req, res) => {
   try {
@@ -38,23 +53,34 @@ app.post("/signup", async (req, res) => {
     let existingUser = await pool.query("SELECT * FROM ud WHERE username = $1;", [body['username']]);
 
     if (existingUser.rows.length > 0) {
-        return res.status(400).json({ error: "Username already exists" });
+      return res.status(400).json({ error: "Username already exists", where: 'username' });
     }
 
     let hashedPassword = await argon2.hash(body['password']);
     console.log(hashedPassword);
     // Insert the new user into the database
-    //await pool.query("INSERT INTO ud (username, pwd) VALUES ($1, $2);", [body['username'], hashedPassword]);
+    await pool.query("INSERT INTO ud (username, pwd) VALUES ($1, $2);", [body['username'], hashedPassword]);
 
-    return res.status(200).json({});
+    // Set session user
+    req.session.user = {
+      id: body['username']
+    };
+
+    req.session.save(e => {
+      if (e) {
+        return res.status(500).json({ error: "Could not save session" });
+      } else {
+        return res.status(200).json({});
+      }
+    });
   } catch (e) {
-    return res.status(400).json({ error: e.message });
+    return res.status(400).json({ error: e.message, where: 'post' });
   }
 });
 
 app.post("/login", async (req, res) => {
   try {
-    let body = req.query;
+    let body = req.body;
 
     if (!body.hasOwnProperty("username") || !body.hasOwnProperty("password")) {
       throw new Error("Username and password are required");
@@ -64,14 +90,14 @@ app.post("/login", async (req, res) => {
     let user = await pool.query("SELECT * FROM ud WHERE username = $1;", [body['username']]);
 
     if (user.rows.length === 0) {
-      return res.status(400).json({ error: "Username does not exist" });
+      return res.status(400).json({ error: "Username does not exist", where: 'username' });
     }
 
     // Verify the password
     let isValidPassword = await argon2.verify(user.rows[0].pwd, body['password']);
 
     if (!isValidPassword) {
-      return res.status(400).json({ error: "Invalid password" });
+      return res.status(400).json({ error: "Invalid password", where: 'password' });
     }
 
     // Set session user
@@ -79,22 +105,45 @@ app.post("/login", async (req, res) => {
       id: body['username']
     };
 
-    return res.status(200).json({});
+    req.session.save(e => {
+      if (e) {
+        return res.status(500).json({ error: "Could not save session" });
+      } else {
+        console.log(req.session);
+        return res.status(200).json({});
+      }
+    });
+  } catch (e) {
+    return res.status(400).json({ error: e.message, where: 'post' });
+  }
+});
+
+app.post("/findmatch", async (req, res) => {
+  try {
+    console.log(req.session);
   } catch (e) {
     return res.status(400).json({ error: e.message });
   }
 });
 
-// TODO: Implement login and signup routes
-app.get('/', (req, res) => {
-  res.sendFile(__dirname + '/src/pages/dashboard/index.html');
+app.post("/logout", async (req, res) => {
+  try {
+    req.session.destroy(e => {
+      if (e) {
+        return res.status(500).json({ error: "Could not log out" });
+      }
+      return res.status(200).json({ message: "Logged out successfully" });
+    });
+  } catch (e) {
+    return res.status(400).json({ error: e.message });
+  }
 });
 
+// for websocket server
 const server = http.createServer(app);
-
 const io = new Server(server, {
   cors: {
-    origin: "http://localhost:5173",
+    origin: ["http://localhost:5173", "http://localhost:3000"],
     methods: ["GET", "POST"]
   }
 });

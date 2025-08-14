@@ -14,13 +14,14 @@
             <form id="login-form">
                 <div class="mb-3">
                     <label for="usernameInput" class="form-label"> Username </label>
-                    <input type="username" class="form-control" id="usernameInput" placeholder="Username">
+                    <input type="username" class="form-control" id="usernameInput" placeholder="Username" required>
+                    <div class="invalid-feedback" id="invalidUsernameText"> </div>
                 </div>
                 <div class="mb-4">
                     <label for="passwordInput" class="form-label"> Password </label>
-                    <input type="password" class="form-control" id="passwordInput" placeholder="Password">
+                    <input type="password" class="form-control" id="passwordInput" placeholder="Password" required>
                 </div>
-                <button type="submit" class="btn btn-primary w-100">Log In</button>
+                <button type="submit" class="btn btn-primary w-100">Sign Up</button>
             </form>
             <p class="mt-3 text-center">
                 Have an account? <a href="/index.html"> Log in here </a>
@@ -36,6 +37,11 @@
     import 'bootstrap/dist/css/bootstrap.min.css'
     import 'bootstrap/dist/js/bootstrap.bundle.min.js'
 
+    let uI = document.getElementById('usernameInput');
+    uI.addEventListener('focus', function(event) {
+        uI.classList.remove('is-invalid');
+    })
+
     document.getElementById("login-form").addEventListener('submit', function(event) {
         event.preventDefault();
 
@@ -49,17 +55,30 @@
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify(loginData)
+            body: JSON.stringify(loginData),
+            credentials: 'include'
         }).then(response => {
+
             if (!response.ok) {
-                throw new Error('Network response was not ok ' + response.statusText);
+                return response.json().then(e => {
+                    console.log(e);
+                    switch (e.where) {
+                        case 'username':
+                            document.getElementById('usernameInput').classList.add('is-invalid');
+                            document.getElementById('invalidUsernameText').textContent = e.error;
+                            break;
+                        default:
+                            break;
+                    }
+                    throw new Error(e.error);
+                });
             }
             return response.json();
         }).then(data => {
-            console.log('results:', data);
+            window.location.href = "./dashboard.html";
         }).catch(error => {
             console.log('Fetch error:', error);
-        })
+        });
     });
 
   </script>
