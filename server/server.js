@@ -18,7 +18,7 @@ app.use(express.static("src"));
 
 // Allow cross-origin requests for front-end dev
 app.use(cors({
-  origin: ["http://localhost:5173"],
+  origin: ["http://127.0.0.1:5173"],
   methods: ["GET", "POST"],
   credentials: true
 }));
@@ -41,49 +41,24 @@ app.use(session({
 
 app.use(express.json());
 
-// ──────────────── ROUTES ────────────────
-
-app.post("/signup", async (req, res) => {
-  try {
-    const { username, password } = req.body;
-    if (!username || !password) throw new Error("Username and password are required");
-
-    const userCheck = await pool.query("SELECT * FROM ud WHERE username = $1", [username]);
-    if (userCheck.rows.length > 0) {
-      return res.status(400).json({ error: "Username already exists", where: 'username' });
-    }
-
-    const hashedPassword = await argon2.hash(password);
-    await pool.query("INSERT INTO ud (username, pwd) VALUES ($1, $2)", [username, hashedPassword]);
-
-    req.session.user = { id: username };
-    req.session.save(err => {
-      if (err) return res.status(500).json({ error: "Could not save session" });
-      return res.status(200).json({});
-    });
-
-  } catch (e) {
-    return res.status(400).json({ error: e.message, where: 'post' });
-  }
+app.listen(3000, '127.0.0.1', () => {
+  console.log('Server is running on http://127.0.0.1:3000');
 });
+
+// ──────────────── ROUTES ────────────────
 
 app.post("/login", async (req, res) => {
   try {
-    const { username, password } = req.body;
-    if (!username || !password) throw new Error("Username and password are required");
+    const { display_name, email, id } = req.body;
+    if (!display_name || !email || !id) throw new Error("display_name, email, id not found");
 
-    const result = await pool.query("SELECT * FROM ud WHERE username = $1", [username]);
+    const result = await pool.query("SELECT * FROM ud WHERE id = $1", [id]);
+    // create account if does not exist
     if (result.rows.length === 0) {
-      return res.status(400).json({ error: "Username does not exist", where: 'username' });
+      pool.query("INSERT INTO ud (id, display_name, email) VALUES ($1, $2, $3)", [id, display_name, email]);
     }
 
-    const user = result.rows[0];
-    const isValid = await argon2.verify(user.pwd, password);
-    if (!isValid) {
-      return res.status(400).json({ error: "Invalid password", where: 'password' });
-    }
-
-    req.session.user = { id: username };
+    req.session.user = { id: id, display_name: display_name, email: email };
     req.session.save(err => {
       if (err) return res.status(500).json({ error: "Could not save session" });
       return res.status(200).json({});
@@ -119,7 +94,7 @@ app.post("/findmatch", (req, res) => {
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: ["http://localhost:5173", "http://localhost:3000"],
+    origin: ["http://127.0.0.1:5173", "http://127.0.0.1:3000"],
     methods: ["GET", "POST"]
   }
 });
@@ -147,6 +122,6 @@ io.on("connection", (socket) => {
 
 // ──────────────── SERVER ────────────────
 
-server.listen(3000, () => {
-  console.log("Server running at http://localhost:3000");
+server.listen(3001, '127.0.0.1', () => {
+  console.log("Socket server running at http://127.0.0.1:3000");
 });
