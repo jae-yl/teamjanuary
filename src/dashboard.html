@@ -1,58 +1,64 @@
 <!doctype html>
 <html lang="en">
-  <head>
+
+<head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <link rel="stylesheet" href="/style.css">
+    <link rel="stylesheet" href="/dashboard.css">
     <title>VibeMatch</title>
-  </head>
-  <body>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+</head>
 
-    <!-- Top banner -->
-    <div class="row">
-      <button id="profile-pic-banner" class="float-end">pfp top right</button>
-    </div>
+<body>
+    <nav class="nav">
+        <div class="logo">VibeMatch</div>
+        <ul class="nav-links">
+            <li class="profile">
+                <img id="profile-pic" class="profile-pic" src="" alt="Profile Picture" />
+                <span id="profile-name">Signed in as …</span>
+            </li>
+            <li>
+                <button id="signout-btn" class="btn">
+                    <i class="fas fa-sign-out-alt"></i>
+                </button>
+            </li>
+        </ul>
+    </nav>
 
-    <div class="row">
-      <!-- LEFT: Spotify Playlist -->
-      <div class="col align-self-center cwc">
-        <div class="card" id="spotify-playlist-column">
-          <h1>Spotify Playlist</h1>
-          <div class="card-body">
-            <p class="card-text">This is where the Spotify playlist will be embedded</p>
-          </div>
-        </div>
-        <button id="findMatchButton">Find Match</button>
-      </div>
-
-      <!-- MIDDLE: Chat List -->
-      <div class="col align-self-start">
-        <div class="container">
-          <div class="row row-cols-1" id="chat-list-column">
-            <div class="card col">
-              <h1>Chat 1</h1>
+    <div class="dashboard-container">
+        <div class="spotify-playlist-column">
+            <h2 class="spotify-playlist-header">
+                Spotify Playlist
+            </h2>
+            <div id="spotify-playlist" class="playlist-container">
             </div>
-            <div class="card col">
-              <h1>Chat 2</h1>
+        </div>
+
+        <div class="main-chat-window">
+            <div class="chat">
+                <header class="chat__header">
+                    <div>
+                        <h2 class="chat__title"></h2>
+                    </div>
+                </header>
+                <main class="chat__messages" aria-live="polite" aria-label="Chat messages">
+
+                </main>
+                <footer class="chat__composer">
+                    <input class="chat__input" type="text" placeholder="Type a message…" />
+                    <button class="chat__send">Send</button>
+                </footer>
             </div>
-          </div>
         </div>
-      </div>
 
-      <!-- RIGHT: Chat Window -->
-      <div class="col align-self-center cwc">
-        <div class="card" id="chat-window-column">
-          <h1>Chat Window</h1>
-          <div class="card-body">
-            <!-- Chat message list -->
-            <div id="chat-messages" style="max-height: 400px; overflow-y: auto;"></div>
-
-        
+        <div class="chat-rooms">
+            <h2 class="chat-room-header">Chat Rooms</h2>
+            <div class="chat-room-card">chat room 1</div>
+            <div class="chat-room-card">chat room 2</div>
         </div>
-      </div>
     </div>
 
     <script type="module" src="main.js"></script>
-  </body>
+</body>
 </html>
