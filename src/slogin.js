@@ -3,7 +3,7 @@ const redirectUrl = 'http://127.0.0.1:5173/dashboard.html';
 
 const authorizationEndpoint = "https://accounts.spotify.com/authorize";
 const tokenEndpoint = "https://accounts.spotify.com/api/token";
-const scope = 'user-read-private user-read-email';
+const scope = 'user-read-private user-read-email playlist-read-private playlist-read-collaborative playlist-modify-private playlist-modify-public';
 
 async function redirectToSpotifyAuthorize() {
     console.log('redirecting');

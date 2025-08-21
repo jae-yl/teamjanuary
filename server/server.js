@@ -47,23 +47,46 @@ app.listen(3000, '127.0.0.1', () => {
 
 // ──────────────── ROUTES ────────────────
 
+app.post("/verifyaccount", async (req, res) => {
+  try {
+    const { id } = req.body;
+
+    const userExists = await pool.query("SELECT * FROM ud WHERE id = $1;", [id]);
+
+    return res.status(200).json({ exists: userExists.rows.length > 0 });
+  } catch (e) {
+    return res.status(400).json({ error: e.message });
+  }
+});
+
+app.post("/createaccount", async (req, res) => {
+  try {
+    const { display_name, email, id, playlist_id } = req.body;
+    if (!display_name || !email || !id || !playlist_id) throw new Error("display_name, email, id, or playlist id not found");
+
+    await pool.query("INSERT INTO ud (id, display_name, email, playlist_id) VALUES ($1, $2, $3, $4);",
+      [id, display_name, email, playlist_id]
+    );
+  } catch (e) {
+    return res.status(400).json({ error: e.message });
+  }
+});
+
 app.post("/login", async (req, res) => {
   try {
-    const { display_name, email, id } = req.body;
-    if (!display_name || !email || !id) throw new Error("display_name, email, id not found");
+    const { id } = req.body;
+    if (!id) throw new Error("id not found");
 
-    const result = await pool.query("SELECT * FROM ud WHERE id = $1", [id]);
-    // create account if does not exist
-    if (result.rows.length === 0) {
-      pool.query("INSERT INTO ud (id, display_name, email) VALUES ($1, $2, $3)", [id, display_name, email]);
-    }
+    const accountData = await pool.query("SELECT * FROM ud WHERE id = $1;", [id]).then(r => { return r.rows[0] });
+    // grab chat logs
+    //const chats = await pool.query("SELECT * FROM chats WHERE to = $1 OR from = $1", [id]);
 
-    req.session.user = { id: id, display_name: display_name, email: email };
+    req.session.user = { id: accountData.id, display_name: accountData.display_name, email: accountData.email, playlist_id: accountData.playlist_id };
     req.session.save(err => {
       if (err) return res.status(500).json({ error: "Could not save session" });
-      return res.status(200).json({});
     });
 
+    return res.status(200).json({ playlist_id: accountData.playlist_id });
   } catch (e) {
     return res.status(400).json({ error: e.message, where: 'post' });
   }
@@ -123,5 +146,5 @@ io.on("connection", (socket) => {
 // ──────────────── SERVER ────────────────
 
 server.listen(3001, '127.0.0.1', () => {
-  console.log("Socket server running at http://127.0.0.1:3000");
+  console.log("Socket server running at http://127.0.0.1:3001");
 });

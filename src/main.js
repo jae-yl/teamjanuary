@@ -112,9 +112,7 @@ async function getToken(code) {
 
   const response = await fetch(tokenEndpoint, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
       client_id: clientId,
       grant_type: 'authorization_code',
@@ -163,23 +161,95 @@ if (code) {
   window.history.replaceState({}, document.title, updatedUrl);
 }
 
-// If we have a token, we're logged in, so fetch user data
-if (currentToken.access_token) {
-  await getUserData().then(results => {
-    fetch('http://127.0.0.1:3000/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify(results)
-    }).then(res => {
-      if (!res.ok) return res.json().then(e => { throw new Error(e.error); });
-      return res.json();
-    }).then(() => {
-      console.log("Logged in!");
-    }).catch(console.error);
-  });
-} else {
+// If we have a don't have a token, make them sign in
+if (!currentToken.access_token) {
   window.location.replace("http://127.0.0.1:5173");
+}
+
+try {
+  const userData = await getUserData();
+
+  // first, check if they have an account
+  const verifyAccount = await fetch("http://127.0.0.1:3000/verifyaccount", {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ id: userData.id })
+  });
+
+  if (!verifyAccount.ok) {
+    const error = await verifyAccount.json();
+    throw new Error(error.error.message);
+  }
+
+  let account = await verifyAccount.json();
+
+  // if don't exist, create VibeMatch playlist and create account
+  if (!account.exists) {
+    // create playlist
+    const spotifyPlaylistEndpoint = `https://api.spotify.com/v1/users/${userData.id}/playlists`;
+
+    const reqBody = {
+      name: "VibeMatch Playlist",
+      description: "VibeMatch App playlist for preference match",
+      public: false
+    };
+
+    const playlistCreate = await fetch(spotifyPlaylistEndpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + currentToken.access_token
+      },
+      body: JSON.stringify(reqBody)
+    });
+
+    if (!playlistCreate.ok) {
+      const error = await playlistCreate.json();
+      throw new Error(error.error.message);
+    }
+
+    const playlistData = await playlistCreate.json();
+    // create account
+    const accountCreate = await fetch("http://127.0.0.1:3000/createaccount", {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ ...userData, playlist_id: playlistData.id })
+    });
+
+    if (!accountCreate.ok) {
+      const error = await accountCreate.json();
+      throw new Error(error.error.message);
+    }
+  }
+  // now log user into account (set session data)
+  const accountData = await fetch("http://127.0.0.1:3000/login", {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ id: userData.id })
+  }).then(r => {
+    return r.json();
+  });
+
+  // grab playlist and display
+  const playlist = await fetch(`https://api.spotify.com/v1/playlists/${accountData.playlist_id}`, {
+    method: 'GET',
+    headers: {
+      'Authorization': 'Bearer ' + currentToken.access_token
+    }
+  }).then(r => {
+    return r.json();
+  });
+
+  console.log(playlist);
+
+} catch (error) {
+  console.error("Error creating playlist:", error);
 }
 
 async function getUserData() {
