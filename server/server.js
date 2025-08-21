@@ -15,6 +15,7 @@ const pgSession = connectPgSimple(session);
 
 const app = express();
 app.use(express.static("src"));
+app.use(express.json());
 
 // Allow cross-origin requests for front-end dev
 app.use(cors({
@@ -38,8 +39,6 @@ app.use(session({
     maxAge: 1000 * 60 * 60 * 12
   }
 }));
-
-app.use(express.json());
 
 app.listen(3000, '127.0.0.1', () => {
   console.log('Server is running on http://127.0.0.1:3000');
@@ -104,6 +103,12 @@ app.post("/logout", (req, res) => {
 });
 
 app.post("/findmatch", (req, res) => {
+  const { titles, artists, albums } = req.body;
+
+  console.log('titles:', titles);
+  console.log('artists:', artists);
+  console.log('albums:', albums);
+
   try {
     console.log("Session data:", req.session);
     res.status(200).json({ status: "ok" });
