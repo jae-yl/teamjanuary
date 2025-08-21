@@ -2,7 +2,7 @@ import 'bootstrap/dist/css/bootstrap.min.css';
 import 'bootstrap/dist/js/bootstrap.bundle.min.js';
 import { io } from "socket.io-client";
 
-const socket = io("http://localhost:3000");
+const socket = io("http://127.0.0.1:3001");
 
 const chatContainer = document.createElement("div");
 chatContainer.classList.add("p-2");
@@ -75,7 +75,7 @@ socket.on("receive_message", (data) => {
 
 // ========== Logout ==========
 document.getElementById("profile-pic-banner")?.addEventListener("click", () => {
-  fetch('http://localhost:3000/logout', {
+  fetch('http://127.0.0.1:3000/logout', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'include'
@@ -83,13 +83,14 @@ document.getElementById("profile-pic-banner")?.addEventListener("click", () => {
     if (!res.ok) return res.json().then(e => { throw new Error(e.error); });
     return res.json();
   }).then(() => {
+    localStorage.clear();
     window.location.href = "./index.html?m=lO";
   }).catch(console.error);
 });
 
 // ========== Find Match ==========
 document.getElementById('findMatchButton')?.addEventListener('click', () => {
-  fetch('http://localhost:3000/findmatch', {
+  fetch('http://127.0.0.1:3000/findmatch', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'include'
@@ -100,3 +101,162 @@ document.getElementById('findMatchButton')?.addEventListener('click', () => {
     console.log("Match found:", data);
   }).catch(console.error);
 });
+
+const clientId = '4a01c36424064f4fb31bf5d5b586eb1f';
+const redirectUrl = 'http://127.0.0.1:5173/dashboard.html';
+const tokenEndpoint = "https://accounts.spotify.com/api/token";
+
+// Spotify API Calls
+async function getToken(code) {
+  const code_verifier = localStorage.getItem('code_verifier');
+
+  const response = await fetch(tokenEndpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      client_id: clientId,
+      grant_type: 'authorization_code',
+      code: code,
+      redirect_uri: redirectUrl,
+      code_verifier: code_verifier,
+    }),
+  });
+
+  return await response.json();
+}
+
+// Data structure that manages the current active token, caching it in localStorage
+const currentToken = {
+  get access_token() { return localStorage.getItem('access_token') || null; },
+  get refresh_token() { return localStorage.getItem('refresh_token') || null; },
+  get expires_in() { return localStorage.getItem('refresh_in') || null },
+  get expires() { return localStorage.getItem('expires') || null },
+
+  save: function (response) {
+    const { access_token, refresh_token, expires_in } = response;
+    localStorage.setItem('access_token', access_token);
+    localStorage.setItem('refresh_token', refresh_token);
+    localStorage.setItem('expires_in', expires_in);
+
+    const now = new Date();
+    const expiry = new Date(now.getTime() + (expires_in * 1000));
+    localStorage.setItem('expires', expiry);
+  }
+};
+
+// On page load, try to fetch auth code from current browser search URL
+const args = new URLSearchParams(window.location.search);
+const code = args.get('code');
+
+// If we find a code, we're in a callback, do a token exchange
+if (code) {
+  const token = await getToken(code);
+  currentToken.save(token);
+
+  // Remove code from URL so we can refresh correctly.
+  const url = new URL(window.location.href);
+  url.searchParams.delete("code");
+
+  const updatedUrl = url.search ? url.href : url.href.replace('?', '');
+  window.history.replaceState({}, document.title, updatedUrl);
+}
+
+// If we have a don't have a token, make them sign in
+if (!currentToken.access_token) {
+  window.location.replace("http://127.0.0.1:5173");
+}
+
+try {
+  const userData = await getUserData();
+
+  // first, check if they have an account
+  const verifyAccount = await fetch("http://127.0.0.1:3000/verifyaccount", {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ id: userData.id })
+  });
+
+  if (!verifyAccount.ok) {
+    const error = await verifyAccount.json();
+    throw new Error(error.error.message);
+  }
+
+  let account = await verifyAccount.json();
+
+  // if don't exist, create VibeMatch playlist and create account
+  if (!account.exists) {
+    // create playlist
+    const spotifyPlaylistEndpoint = `https://api.spotify.com/v1/users/${userData.id}/playlists`;
+
+    const reqBody = {
+      name: "VibeMatch Playlist",
+      description: "VibeMatch App playlist for preference match",
+      public: false
+    };
+
+    const playlistCreate = await fetch(spotifyPlaylistEndpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + currentToken.access_token
+      },
+      body: JSON.stringify(reqBody)
+    });
+
+    if (!playlistCreate.ok) {
+      const error = await playlistCreate.json();
+      throw new Error(error.error.message);
+    }
+
+    const playlistData = await playlistCreate.json();
+    // create account
+    const accountCreate = await fetch("http://127.0.0.1:3000/createaccount", {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ ...userData, playlist_id: playlistData.id })
+    });
+
+    if (!accountCreate.ok) {
+      const error = await accountCreate.json();
+      throw new Error(error.error.message);
+    }
+  }
+  // now log user into account (set session data)
+  const accountData = await fetch("http://127.0.0.1:3000/login", {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ id: userData.id })
+  }).then(r => {
+    return r.json();
+  });
+
+  // grab playlist and display
+  const playlist = await fetch(`https://api.spotify.com/v1/playlists/${accountData.playlist_id}`, {
+    method: 'GET',
+    headers: {
+      'Authorization': 'Bearer ' + currentToken.access_token
+    }
+  }).then(r => {
+    return r.json();
+  });
+
+  console.log(playlist);
+
+} catch (error) {
+  console.error("Error creating playlist:", error);
+}
+
+async function getUserData() {
+  const response = await fetch("https://api.spotify.com/v1/me", {
+    method: 'GET',
+    headers: { 'Authorization': 'Bearer ' + currentToken.access_token },
+  });
+
+  return await response.json();
+}

@@ -18,7 +18,7 @@ app.use(express.static("src"));
 
 // Allow cross-origin requests for front-end dev
 app.use(cors({
-  origin: ["http://localhost:5173"],
+  origin: ["http://127.0.0.1:5173"],
   methods: ["GET", "POST"],
   credentials: true
 }));
@@ -41,54 +41,52 @@ app.use(session({
 
 app.use(express.json());
 
+app.listen(3000, '127.0.0.1', () => {
+  console.log('Server is running on http://127.0.0.1:3000');
+});
+
 // ──────────────── ROUTES ────────────────
 
-app.post("/signup", async (req, res) => {
+app.post("/verifyaccount", async (req, res) => {
   try {
-    const { username, password } = req.body;
-    if (!username || !password) throw new Error("Username and password are required");
+    const { id } = req.body;
 
-    const userCheck = await pool.query("SELECT * FROM ud WHERE username = $1", [username]);
-    if (userCheck.rows.length > 0) {
-      return res.status(400).json({ error: "Username already exists", where: 'username' });
-    }
+    const userExists = await pool.query("SELECT * FROM ud WHERE id = $1;", [id]);
 
-    const hashedPassword = await argon2.hash(password);
-    await pool.query("INSERT INTO ud (username, pwd) VALUES ($1, $2)", [username, hashedPassword]);
-
-    req.session.user = { id: username };
-    req.session.save(err => {
-      if (err) return res.status(500).json({ error: "Could not save session" });
-      return res.status(200).json({});
-    });
-
+    return res.status(200).json({ exists: userExists.rows.length > 0 });
   } catch (e) {
-    return res.status(400).json({ error: e.message, where: 'post' });
+    return res.status(400).json({ error: e.message });
+  }
+});
+
+app.post("/createaccount", async (req, res) => {
+  try {
+    const { display_name, email, id, playlist_id } = req.body;
+    if (!display_name || !email || !id || !playlist_id) throw new Error("display_name, email, id, or playlist id not found");
+
+    await pool.query("INSERT INTO ud (id, display_name, email, playlist_id) VALUES ($1, $2, $3, $4);",
+      [id, display_name, email, playlist_id]
+    );
+  } catch (e) {
+    return res.status(400).json({ error: e.message });
   }
 });
 
 app.post("/login", async (req, res) => {
   try {
-    const { username, password } = req.body;
-    if (!username || !password) throw new Error("Username and password are required");
+    const { id } = req.body;
+    if (!id) throw new Error("id not found");
 
-    const result = await pool.query("SELECT * FROM ud WHERE username = $1", [username]);
-    if (result.rows.length === 0) {
-      return res.status(400).json({ error: "Username does not exist", where: 'username' });
-    }
+    const accountData = await pool.query("SELECT * FROM ud WHERE id = $1;", [id]).then(r => { return r.rows[0] });
+    // grab chat logs
+    //const chats = await pool.query("SELECT * FROM chats WHERE to = $1 OR from = $1", [id]);
 
-    const user = result.rows[0];
-    const isValid = await argon2.verify(user.pwd, password);
-    if (!isValid) {
-      return res.status(400).json({ error: "Invalid password", where: 'password' });
-    }
-
-    req.session.user = { id: username };
+    req.session.user = { id: accountData.id, display_name: accountData.display_name, email: accountData.email, playlist_id: accountData.playlist_id };
     req.session.save(err => {
       if (err) return res.status(500).json({ error: "Could not save session" });
-      return res.status(200).json({});
     });
 
+    return res.status(200).json({ playlist_id: accountData.playlist_id });
   } catch (e) {
     return res.status(400).json({ error: e.message, where: 'post' });
   }
@@ -119,7 +117,7 @@ app.post("/findmatch", (req, res) => {
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: ["http://localhost:5173", "http://localhost:3000"],
+    origin: ["http://127.0.0.1:5173", "http://127.0.0.1:3000"],
     methods: ["GET", "POST"]
   }
 });
@@ -147,6 +145,6 @@ io.on("connection", (socket) => {
 
 // ──────────────── SERVER ────────────────
 
-server.listen(3000, () => {
-  console.log("Server running at http://localhost:3000");
+server.listen(3001, '127.0.0.1', () => {
+  console.log("Socket server running at http://127.0.0.1:3001");
 });
