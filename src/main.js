@@ -2,8 +2,11 @@ import 'bootstrap/dist/css/bootstrap.min.css';
 import 'bootstrap/dist/js/bootstrap.bundle.min.js';
 import { io } from "socket.io-client";
 
-const socket = io("http://127.0.0.1:3001");
+// Allow configurable socket URL (fallback to 3001)
+const SOCKET_URL = window.SOCKET_URL || "http://127.0.0.1:3001";
+const socket = io(SOCKET_URL);
 
+// ----- Chat UI scaffold -----
 const chatContainer = document.createElement("div");
 chatContainer.classList.add("p-2");
 chatContainer.innerHTML = `
@@ -16,98 +19,108 @@ chatContainer.innerHTML = `
 const chatWindowBody = document.querySelector("#chat-window-column .card-body");
 chatWindowBody?.appendChild(chatContainer);
 
-// ========== Room Switching ==========
+// ----- State -----
 let currentRoom = null;
-document.querySelectorAll("#chat-list-column .card").forEach((card, i) => {
-  card.addEventListener("click", () => {
-    const newRoom = `room${i + 1}`;
-    if (newRoom === currentRoom) return;
-    if (currentRoom) socket.emit("leave_room", currentRoom);
-    currentRoom = newRoom;
-    socket.emit("join_room", currentRoom);
-    clearMessages();
-    const title = document.querySelector("#chat-window-column h1");
-    if (title) title.textContent = `Chat Window: ${currentRoom}`;
-  });
-});
-document.querySelector("#chat-list-column .card")?.click(); // Auto-select first
 
-// ========== Chat Functionality ==========
+// ----- Elements -----
 const usernameInput = document.getElementById("username");
-const messageInput = document.getElementById("messageInput");
-const sendBtn = document.getElementById("sendBtn");
-const messages = document.getElementById("chat-messages");
+const messageInput  = document.getElementById("messageInput");
+const sendBtn       = document.getElementById("sendBtn");
+const messages      = document.getElementById("chat-messages");
 
+// ----- Helpers -----
 function appendMessage(msg, isMe = false) {
   const div = document.createElement("div");
-  div.classList.add("chat-bubble");
-  div.classList.add(isMe ? "sent" : "received");
+  div.classList.add("chat-bubble", isMe ? "sent" : "received");
   div.textContent = msg;
   messages.appendChild(div);
   messages.scrollTop = messages.scrollHeight;
 }
+function clearMessages() { messages.innerHTML = ""; }
 
-function clearMessages() {
-  messages.innerHTML = "";
-}
+// ----- History: register BEFORE any join_room happens -----
+socket.on("load_messages", (rows = []) => {
+  clearMessages();
+  rows.forEach(r => {
+    const name = r.username ?? r.user ?? "user";
+    const text = r.message  ?? r.msg  ?? "";
+    const isMe = name === (usernameInput?.value?.trim() || "");
+    appendMessage(`${name}: ${text}`, isMe);
+  });
+});
 
+// ----- Live messages: single, unified handler -----
+socket.off("receive_message"); // ensure a single listener
+socket.on("receive_message", (data = {}) => {
+  // Normalize payload
+  const name = data.username ?? data.user ?? "user";
+  const text = data.message  ?? data.msg  ?? "";
+
+  // If server includes room, filter by it
+  if (data.room != null && data.room !== currentRoom) return;
+
+  // Skip rendering our own broadcast (we already echo locally)
+  const isMe = name === (usernameInput?.value?.trim() || "");
+  if (isMe) return;
+
+  appendMessage(`${name}: ${text}`, false);
+});
+
+// ----- Room switching -----
+document.querySelectorAll("#chat-list-column .card").forEach((card, i) => {
+  card.addEventListener("click", () => {
+    const newRoom = `room${i + 1}`;
+    if (newRoom === currentRoom) return;
+
+    if (currentRoom) socket.emit("leave_room", currentRoom);
+    currentRoom = newRoom;
+
+    socket.emit("join_room", currentRoom);
+    clearMessages();
+
+    const title = document.querySelector("#chat-window-column h1");
+    if (title) title.textContent = `Chat Window: ${currentRoom}`;
+  });
+});
+
+// Auto-select first room AFTER listeners are set
+document.querySelector("#chat-list-column .card")?.click();
+
+// ----- Sending -----
 function sendMessage() {
   const user = usernameInput.value.trim();
-  const msg = messageInput.value.trim();
-  if (user && msg && currentRoom) {
-    socket.emit("send_message", { room: currentRoom, user, msg });
-    appendMessage(`You: ${msg}`, true); // Show immediately
-    messageInput.value = "";
-  }
-}
+  const msg  = messageInput.value.trim();
+  if (!user || !msg || !currentRoom) return;
 
+  socket.emit("send_message", { room: currentRoom, user, msg });
+  appendMessage(`You: ${msg}`, true); // local echo
+  messageInput.value = "";
+}
 sendBtn?.addEventListener("click", sendMessage);
 messageInput?.addEventListener("keydown", (e) => {
   if (e.key === "Enter") sendMessage();
 });
 
-socket.off("receive_message");
-socket.on("receive_message", (data) => {
-  if (data.room !== currentRoom) return;
-  const isMe = data.user === usernameInput.value.trim();
-  if (!isMe) appendMessage(`${data.user}: ${data.msg}`, false);
-});
-
-// ========== Logout ==========
+// ----- Logout -----
 document.getElementById("profile-pic-banner")?.addEventListener("click", () => {
   fetch('http://127.0.0.1:3000/logout', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'include'
-  }).then(res => {
-    if (!res.ok) return res.json().then(e => { throw new Error(e.error); });
-    return res.json();
-  }).then(() => {
-    localStorage.clear();
-    window.location.href = "./index.html?m=lO";
-  }).catch(console.error);
+  }).then(res => res.ok ? res.json() : res.json().then(e => { throw new Error(e.error); }))
+    .then(() => {
+      localStorage.clear();
+      window.location.href = "./index.html?m=lO";
+    })
+    .catch(console.error);
 });
 
 // ========== Find Match ==========
-document.getElementById('findMatchButton')?.addEventListener('click', async () => {
-  const playlistUrl = document.getElementById('playlistUrl').value;
-  if (!playlistUrl) {
-    console.warn('No playlist URL provided');
-    return;
-  }
-
-  const playlistData = await getPlaylistFromUrl(playlistUrl, currentToken.access_token);
-  console.log('Client validated playlist:', playlistData?.name, playlistData?.id);
-  console.log('Playlist data:', playlistData);
-
-  const trackData = await getTrackDataFromPlaylist(playlistData);
-  console.log('Track data:', trackData);
-
+document.getElementById('findMatchButton')?.addEventListener('click', () => {
   fetch('http://127.0.0.1:3000/findmatch', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    credentials: 'include',
-    body: JSON.stringify(trackData)
+    credentials: 'include'
   }).then(res => {
     if (!res.ok) return res.json().then(e => { throw new Error(e.error); });
     return res.json();
@@ -116,66 +129,54 @@ document.getElementById('findMatchButton')?.addEventListener('click', async () =
   }).catch(console.error);
 });
 
+// ----- Spotify auth flow (unchanged) -----
 const clientId = '4a01c36424064f4fb31bf5d5b586eb1f';
 const redirectUrl = 'http://127.0.0.1:5173/dashboard.html';
 const tokenEndpoint = "https://accounts.spotify.com/api/token";
 
-// Spotify API Calls
 async function getToken(code) {
   const code_verifier = localStorage.getItem('code_verifier');
-
   const response = await fetch(tokenEndpoint, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
       client_id: clientId,
       grant_type: 'authorization_code',
-      code: code,
+      code,
       redirect_uri: redirectUrl,
-      code_verifier: code_verifier,
+      code_verifier,
     }),
   });
-
   return await response.json();
 }
 
-// Data structure that manages the current active token, caching it in localStorage
 const currentToken = {
   get access_token() { return localStorage.getItem('access_token') || null; },
   get refresh_token() { return localStorage.getItem('refresh_token') || null; },
-  get expires_in() { return localStorage.getItem('refresh_in') || null },
-  get expires() { return localStorage.getItem('expires') || null },
-
-  save: function (response) {
+  get expires_in()    { return localStorage.getItem('refresh_in') || null; },
+  get expires()       { return localStorage.getItem('expires') || null; },
+  save(response) {
     const { access_token, refresh_token, expires_in } = response;
     localStorage.setItem('access_token', access_token);
     localStorage.setItem('refresh_token', refresh_token);
-    localStorage.setItem('expires_in', expires_in);
-
+    localStorage.setItem('expires_in',  expires_in);
     const now = new Date();
     const expiry = new Date(now.getTime() + (expires_in * 1000));
     localStorage.setItem('expires', expiry);
   }
 };
 
-// On page load, try to fetch auth code from current browser search URL
 const args = new URLSearchParams(window.location.search);
 const code = args.get('code');
-
-// If we find a code, we're in a callback, do a token exchange
 if (code) {
   const token = await getToken(code);
   currentToken.save(token);
-
-  // Remove code from URL so we can refresh correctly.
   const url = new URL(window.location.href);
   url.searchParams.delete("code");
-
   const updatedUrl = url.search ? url.href : url.href.replace('?', '');
   window.history.replaceState({}, document.title, updatedUrl);
 }
 
-// If we have a don't have a token, make them sign in
 if (!currentToken.access_token) {
   window.location.replace("http://127.0.0.1:5173");
 }
@@ -183,33 +184,24 @@ if (!currentToken.access_token) {
 try {
   const userData = await getUserData();
 
-  // first, check if they have an account
   const verifyAccount = await fetch("http://127.0.0.1:3000/verifyaccount", {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ id: userData.id })
   });
-
   if (!verifyAccount.ok) {
     const error = await verifyAccount.json();
     throw new Error(error.error.message);
   }
+  const account = await verifyAccount.json();
 
-  let account = await verifyAccount.json();
-
-  // if don't exist, create VibeMatch playlist and create account
   if (!account.exists) {
-    // create playlist
     const spotifyPlaylistEndpoint = `https://api.spotify.com/v1/users/${userData.id}/playlists`;
-
     const reqBody = {
       name: "VibeMatch Playlist",
       description: "VibeMatch App playlist for preference match",
       public: false
     };
-
     const playlistCreate = await fetch(spotifyPlaylistEndpoint, {
       method: 'POST',
       headers: {
@@ -218,50 +210,35 @@ try {
       },
       body: JSON.stringify(reqBody)
     });
-
     if (!playlistCreate.ok) {
       const error = await playlistCreate.json();
       throw new Error(error.error.message);
     }
-
     const playlistData = await playlistCreate.json();
-    // create account
+
     const accountCreate = await fetch("http://127.0.0.1:3000/createaccount", {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...userData, playlist_id: playlistData.id })
     });
-
     if (!accountCreate.ok) {
       const error = await accountCreate.json();
       throw new Error(error.error.message);
     }
   }
-  // now log user into account (set session data)
+
   const accountData = await fetch("http://127.0.0.1:3000/login", {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ id: userData.id })
-  }).then(r => {
-    return r.json();
-  });
+  }).then(r => r.json());
 
-  // grab playlist and display
   const playlist = await fetch(`https://api.spotify.com/v1/playlists/${accountData.playlist_id}`, {
     method: 'GET',
-    headers: {
-      'Authorization': 'Bearer ' + currentToken.access_token
-    }
-  }).then(r => {
-    return r.json();
-  });
+    headers: { 'Authorization': 'Bearer ' + currentToken.access_token }
+  }).then(r => r.json());
 
   console.log(playlist);
-
 } catch (error) {
   console.error("Error creating playlist:", error);
 }
@@ -271,52 +248,5 @@ async function getUserData() {
     method: 'GET',
     headers: { 'Authorization': 'Bearer ' + currentToken.access_token },
   });
-
   return await response.json();
-}
-
-async function getPlaylistFromUrl(playlistUrl, accessToken) {
-  const id = extractPlaylistId(playlistUrl);
-  const res = await fetch(`https://api.spotify.com/v1/playlists/${id}`, {
-    headers: { 'Authorization': `Bearer ${accessToken}`}
-  });
-  return res.json();
-}
-
-async function getTrackFromId(id, accessToken) {
-  const res = await fetch(`https://api.spotify.com/v1/audio-features/${id}`, {
-    headers: { 'Authorization': `Bearer ${accessToken}`}
-  });
-  return res.json();
-}
-
-function extractPlaylistId(input) {
-  // spotify URI handler
-  const mUri = input.match(/^spotify:playlist:([A-Za-z0-9]+)$/i);
-  if (mUri) return mUri[1];
-
-  // spotify URL handler
-  const url = new URL(input);
-  const parts = url.pathname.split("/").filter(Boolean);
-  const i = parts.indexOf("playlist");
-  if (i >= 0 && parts[i + 1]) return parts[i + 1];
-
-  return null;
-}
-
-async function getTrackDataFromPlaylist(playlistData) {
-  const tracks = playlistData.tracks.items;
-  let trackData = {titles: [], artists: [], albums: []};
-
-  for (let i = 0; i < 10; i++) {
-    const currentTrack = tracks[i].track;
-    const title = currentTrack.name;
-    const artists = currentTrack.artists;
-    const album = currentTrack.album;
-    trackData.titles.push(title);
-    for (const artist of artists) { trackData.artists.push(artist.name) }
-    trackData.albums.push(album.name);
-  }
-
-  return trackData;
 }
