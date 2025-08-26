@@ -2,7 +2,9 @@ import 'bootstrap/dist/css/bootstrap.min.css';
 import 'bootstrap/dist/js/bootstrap.bundle.min.js';
 import { io } from 'socket.io-client';
 
-const socket = io('http://127.0.0.1:3001');
+// Allow configurable socket URL (fallback to 3001)
+const SOCKET_URL = window.SOCKET_URL || "http://127.0.0.1:3001";
+const socket = io(SOCKET_URL);
 
 const messages = document.querySelector('.main-chat-window .chat__messages');
 const input = document.querySelector('.main-chat-window .chat__input');
@@ -94,6 +96,7 @@ signOutBtn?.addEventListener('click', async () => {
   window.location.href = './index.html?m=lO';
 });
 
+// ----- Spotify auth flow (unchanged) -----
 const clientId = '4a01c36424064f4fb31bf5d5b586eb1f';
 const redirectUrl = 'http://127.0.0.1:5173/dashboard.html';
 const tokenEndpoint = 'https://accounts.spotify.com/api/token';
@@ -124,8 +127,8 @@ async function getToken(code) {
       grant_type: 'authorization_code',
       code,
       redirect_uri: redirectUrl,
-      code_verifier
-    })
+      code_verifier,
+    }),
   });
   if (!res.ok) throw new Error(await res.text());
   return res.json();

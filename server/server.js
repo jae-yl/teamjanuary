@@ -10,11 +10,38 @@ import * as argon2 from 'argon2';
 import { Pool } from 'pg';
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
+pool.query('SELECT current_database() AS db, current_user AS usr')
+  .then(r => console.log('PG connected →', r.rows[0]))
+  .catch(e => console.error('PG connect check failed:', e));
+
+// ──────────────── CHATS TABLE BOOTSTRAP (Option A schema) ────────────────
+async function ensureChatsTable() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS public.chats (
+      id          SERIAL PRIMARY KEY,
+      room        VARCHAR(50) NOT NULL,
+      username    VARCHAR(50) NOT NULL,
+      message     TEXT        NOT NULL,
+      "timestamp" TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      sender_id   VARCHAR
+    );
+    CREATE INDEX IF NOT EXISTS idx_chats_room_ts   ON public.chats (room, "timestamp");
+    CREATE INDEX IF NOT EXISTS idx_chats_sender_id ON public.chats (sender_id);
+  `);
+}
+ensureChatsTable().catch(err => {
+  console.error("Failed to ensure chats table:", err);
+  process.exit(1);
+});
+
+
+
 import connectPgSimple from 'connect-pg-simple';
 const pgSession = connectPgSimple(session);
 
 const app = express();
 app.use(express.static("src"));
+app.use(express.json());
 
 // Allow cross-origin requests for front-end dev
 app.use(cors({
@@ -39,8 +66,6 @@ app.use(session({
   }
 }));
 
-app.use(express.json());
-
 app.listen(3000, '127.0.0.1', () => {
   console.log('Server is running on http://127.0.0.1:3000');
 });
@@ -62,11 +87,16 @@ app.post("/verifyaccount", async (req, res) => {
 app.post("/createaccount", async (req, res) => {
   try {
     const { display_name, email, id, playlist_id } = req.body;
-    if (!display_name || !email || !id || !playlist_id) throw new Error("display_name, email, id, or playlist id not found");
+    if (!display_name || !email || !id || !playlist_id) {
+      throw new Error("display_name, email, id, or playlist id not found");
+    }
 
-    await pool.query("INSERT INTO ud (id, display_name, email, playlist_id) VALUES ($1, $2, $3, $4);",
+    await pool.query(
+      "INSERT INTO ud (id, display_name, email, playlist_id) VALUES ($1, $2, $3, $4);",
       [id, display_name, email, playlist_id]
     );
+
+    return res.status(200).json({ status: "ok" });
   } catch (e) {
     return res.status(400).json({ error: e.message });
   }
@@ -77,16 +107,25 @@ app.post("/login", async (req, res) => {
     const { id } = req.body;
     if (!id) throw new Error("id not found");
 
-    const accountData = await pool.query("SELECT * FROM ud WHERE id = $1;", [id]).then(r => { return r.rows[0] });
-    // grab chat logs
-    //const chats = await pool.query("SELECT * FROM chats WHERE to = $1 OR from = $1", [id]);
+    const accountData = await pool
+      .query("SELECT * FROM ud WHERE id = $1;", [id])
+      .then(r => r.rows[0]);
 
-    req.session.user = { id: accountData.id, display_name: accountData.display_name, email: accountData.email, playlist_id: accountData.playlist_id };
+    if (!accountData) {
+      return res.status(404).json({ error: "Account not found" });
+    }
+
+    req.session.user = {
+      id: accountData.id,
+      display_name: accountData.display_name,
+      email: accountData.email,
+      playlist_id: accountData.playlist_id
+    };
+
     req.session.save(err => {
       if (err) return res.status(500).json({ error: "Could not save session" });
+      return res.status(200).json({ playlist_id: accountData.playlist_id });
     });
-
-    return res.status(200).json({ playlist_id: accountData.playlist_id });
   } catch (e) {
     return res.status(400).json({ error: e.message, where: 'post' });
   }
@@ -104,6 +143,12 @@ app.post("/logout", (req, res) => {
 });
 
 app.post("/findmatch", (req, res) => {
+  const { titles, artists, albums } = req.body;
+
+  console.log('titles:', titles);
+  console.log('artists:', artists);
+  console.log('albums:', albums);
+
   try {
     console.log("Session data:", req.session);
     res.status(200).json({ status: "ok" });
@@ -125,18 +170,64 @@ const io = new Server(server, {
 io.on("connection", (socket) => {
   console.log("User connected:", socket.id);
 
-  socket.on("join_room", (room) => {
+  // JOIN: load last 50 messages (oldest → newest) for this room
+  socket.on("join_room", async (room) => {
+    if (!room) return;
     socket.join(room);
     console.log(`Socket ${socket.id} joined room ${room}`);
+
+    try {
+      const { rows } = await pool.query(
+        `SELECT username, message, sender_id, "timestamp"
+         FROM public.chats
+         WHERE room = $1
+         ORDER BY "timestamp" ASC
+         LIMIT 50`,
+        [room]
+      );
+      // only to the joining user
+      socket.emit("load_messages", rows);
+    } catch (err) {
+      console.error("Error fetching chat history:", err);
+      socket.emit("room_history_error", "Could not load chat history");
+    }
   });
 
-  socket.on("send_message", (data) => {
-    const { room, user, msg } = data;
-    if (!room || !user || !msg) return;
+  // SEND: persist message and broadcast to everyone in the room EXCEPT the sender
+socket.on("send_message", async (data = {}) => {
+  const { room, user, msg } = data;
+  if (!room || !user || !msg) return;
 
-    io.to(room).emit("receive_message", { user, msg });
-    console.log(`[Room ${room}] ${user}: ${msg}`);
-  });
+  const username  = typeof user === "string" ? user : (user?.username || String(user?.id) || "user");
+  const sender_id = typeof user === "string" ? null : (user?.id != null ? String(user.id) : null);
+
+  console.log("SEND_MESSAGE received →", { room, username, msg });
+
+  try {
+    const result = await pool.query(
+      `INSERT INTO public.chats (room, username, message, sender_id)
+       VALUES ($1, $2, $3, $4)`,
+      [room, username, msg, sender_id]
+    );
+    console.log("INSERT rowCount →", result.rowCount);
+
+    // send to everyone else (prevents double bubble for sender)
+// send to everyone else (prevents double bubble for sender)
+socket.to(room).emit("receive_message", {
+  room,
+  username,                 // new shape
+  user: username,           // legacy shape
+  message: msg,             // new shape
+  msg,                      // legacy shape
+  sender_id,
+  timestamp: new Date().toISOString(),
+});
+
+  } catch (err) {
+    console.error("INSERT error →", err);
+    socket.emit("send_error", "Could not send your message");
+  }
+});
 
   socket.on("disconnect", () => {
     console.log("User disconnected:", socket.id);
@@ -148,3 +239,4 @@ io.on("connection", (socket) => {
 server.listen(3001, '127.0.0.1', () => {
   console.log("Socket server running at http://127.0.0.1:3001");
 });
+
