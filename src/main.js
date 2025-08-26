@@ -1,142 +1,125 @@
 import 'bootstrap/dist/css/bootstrap.min.css';
 import 'bootstrap/dist/js/bootstrap.bundle.min.js';
-import { io } from "socket.io-client";
+import { io } from 'socket.io-client';
 
 // Allow configurable socket URL (fallback to 3001)
 const SOCKET_URL = window.SOCKET_URL || "http://127.0.0.1:3001";
 const socket = io(SOCKET_URL);
 
-// ----- Chat UI scaffold -----
-const chatContainer = document.createElement("div");
-chatContainer.classList.add("p-2");
-chatContainer.innerHTML = `
-  <h5>Chat</h5>
-  <input type="text" id="username" placeholder="Your name" class="form-control mb-2" />
-  <input type="text" id="messageInput" placeholder="Your message..." class="form-control mb-2" />
-  <button class="btn btn-primary mb-3" id="sendBtn">Send</button>
-  <div id="chat-messages" style="max-height: 300px; overflow-y: auto;"></div>
-`;
-const chatWindowBody = document.querySelector("#chat-window-column .card-body");
-chatWindowBody?.appendChild(chatContainer);
+const messages = document.querySelector('.main-chat-window .chat__messages');
+const input = document.querySelector('.main-chat-window .chat__input');
+const sendBtn = document.querySelector('.main-chat-window .chat__send');
+const title = document.querySelector('.main-chat-window .chat__title');
+const roomCards = Array.from(document.querySelectorAll('.chat-rooms .chat-room-card'));
 
-// ----- State -----
-let currentRoom = null;
+function timeNow(ts = Date.now()) {
+  return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
 
-// ----- Elements -----
-const usernameInput = document.getElementById("username");
-const messageInput  = document.getElementById("messageInput");
-const sendBtn       = document.getElementById("sendBtn");
-const messages      = document.getElementById("chat-messages");
-
-// ----- Helpers -----
-function appendMessage(msg, isMe = false) {
-  const div = document.createElement("div");
-  div.classList.add("chat-bubble", isMe ? "sent" : "received");
-  div.textContent = msg;
-  messages.appendChild(div);
+function addMessage({ text, who = 'them', user, timestamp = Date.now() }) {
+  if (!messages || !text) return;
+  const wrap = document.createElement('div');
+  wrap.className = `msg ${who === 'me' ? 'msg--me' : 'msg--them'}`;
+  const bubble = document.createElement('div');
+  bubble.className = 'msg__bubble';
+  bubble.textContent = text;
+  const meta = document.createElement('span');
+  meta.className = 'msg__meta';
+  meta.textContent = `${who === 'me' ? 'You' : (user || 'User')} • ${timeNow(timestamp)}`;
+  wrap.append(bubble, meta);
+  messages.appendChild(wrap);
   messages.scrollTop = messages.scrollHeight;
 }
-function clearMessages() { messages.innerHTML = ""; }
+function clearMessages() { if (messages) messages.innerHTML = ''; }
 
-// ----- History: register BEFORE any join_room happens -----
-socket.on("load_messages", (rows = []) => {
+function getChatUsername() {
+  return localStorage.getItem('vm_display_name') || '';
+}
+
+let currentRoom = null;
+function joinRoom(room, card = null) {
+  if (!room) return;
+  if (currentRoom) socket.emit('leave_room', currentRoom);
+  currentRoom = room;
+  socket.emit('join_room', currentRoom);
   clearMessages();
-  rows.forEach(r => {
-    const name = r.username ?? r.user ?? "user";
-    const text = r.message  ?? r.msg  ?? "";
-    const isMe = name === (usernameInput?.value?.trim() || "");
-    appendMessage(`${name}: ${text}`, isMe);
-  });
+  if (title) title.textContent = `${currentRoom}`;
+  if (card) roomCards.forEach(c => c.classList.toggle('active', c === card));
+}
+roomCards.forEach((card, i) => {
+  const room = `chat-room-${i + 1}`;
+  card.addEventListener('click', () => joinRoom(room, card));
 });
+if (!currentRoom) joinRoom('chat-room-1', roomCards[0] || null);
 
-// ----- Live messages: single, unified handler -----
-socket.off("receive_message"); // ensure a single listener
-socket.on("receive_message", (data = {}) => {
-  // Normalize payload
-  const name = data.username ?? data.user ?? "user";
-  const text = data.message  ?? data.msg  ?? "";
-
-  // If server includes room, filter by it
-  if (data.room != null && data.room !== currentRoom) return;
-
-  // Skip rendering our own broadcast (we already echo locally)
-  const isMe = name === (usernameInput?.value?.trim() || "");
-  if (isMe) return;
-
-  appendMessage(`${name}: ${text}`, false);
-});
-
-// ----- Room switching -----
-document.querySelectorAll("#chat-list-column .card").forEach((card, i) => {
-  card.addEventListener("click", () => {
-    const newRoom = `room${i + 1}`;
-    if (newRoom === currentRoom) return;
-
-    if (currentRoom) socket.emit("leave_room", currentRoom);
-    currentRoom = newRoom;
-
-    socket.emit("join_room", currentRoom);
-    clearMessages();
-
-    const title = document.querySelector("#chat-window-column h1");
-    if (title) title.textContent = `Chat Window: ${currentRoom}`;
-  });
-});
-
-// Auto-select first room AFTER listeners are set
-document.querySelector("#chat-list-column .card")?.click();
-
-// ----- Sending -----
 function sendMessage() {
-  const user = usernameInput.value.trim();
-  const msg  = messageInput.value.trim();
+  const user = getChatUsername();
+  const msg = (input?.value || '').trim();
   if (!user || !msg || !currentRoom) return;
 
-  socket.emit("send_message", { room: currentRoom, user, msg });
-  appendMessage(`You: ${msg}`, true); // local echo
-  messageInput.value = "";
+  addMessage({ text: msg, who: 'me', user });
+  socket.emit('send_message', { room: currentRoom, user, msg });
+  input.value = '';
 }
-sendBtn?.addEventListener("click", sendMessage);
-messageInput?.addEventListener("keydown", (e) => {
-  if (e.key === "Enter") sendMessage();
+sendBtn?.addEventListener('click', sendMessage);
+input?.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+});
+socket.off('receive_message');
+socket.on('receive_message', (data) => {
+  if (data.room && data.room !== currentRoom) return;
+  const mine = data.user === getChatUsername();
+  if (!mine) addMessage({ text: data.msg, who: 'them', user: data.user, timestamp: data.timestamp || Date.now() });
 });
 
-// ----- Logout -----
-document.getElementById("profile-pic-banner")?.addEventListener("click", () => {
-  fetch('http://127.0.0.1:3000/logout', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    credentials: 'include'
-  }).then(res => res.ok ? res.json() : res.json().then(e => { throw new Error(e.error); }))
-    .then(() => {
-      localStorage.clear();
-      window.location.href = "./index.html?m=lO";
-    })
-    .catch(console.error);
-});
+const API = 'http://127.0.0.1:3000';
+const profilePic = document.getElementById('profile-pic');
+const profileName = document.getElementById('profile-name');
+const signOutBtn = document.getElementById('signout-btn');
 
-// ========== Find Match ==========
-document.getElementById('findMatchButton')?.addEventListener('click', () => {
-  fetch('http://127.0.0.1:3000/findmatch', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    credentials: 'include'
-  }).then(res => {
-    if (!res.ok) return res.json().then(e => { throw new Error(e.error); });
-    return res.json();
-  }).then(data => {
-    console.log("Match found:", data);
-  }).catch(console.error);
+signOutBtn?.addEventListener('click', async () => {
+  try {
+    const r = await fetch(`${API}/logout`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include'
+    });
+    if (!r.ok) throw new Error(await r.text());
+  } catch (e) { console.error(e); }
+  localStorage.removeItem('vm_display_name');
+  localStorage.removeItem('vm_avatar_url');
+  localStorage.removeItem('vm_playlist_id');
+  localStorage.removeItem('access_token');
+  localStorage.removeItem('refresh_token');
+  localStorage.removeItem('expires_in');
+  localStorage.removeItem('expires');
+  window.location.href = './index.html?m=lO';
 });
 
 // ----- Spotify auth flow (unchanged) -----
 const clientId = '4a01c36424064f4fb31bf5d5b586eb1f';
 const redirectUrl = 'http://127.0.0.1:5173/dashboard.html';
-const tokenEndpoint = "https://accounts.spotify.com/api/token";
+const tokenEndpoint = 'https://accounts.spotify.com/api/token';
+
+const currentToken = {
+  get access_token() { return localStorage.getItem('access_token') || null; },
+  get refresh_token() { return localStorage.getItem('refresh_token') || null; },
+  get expires_in() { return Number(localStorage.getItem('expires_in') || 0); },
+  get expires() { return Number(localStorage.getItem('expires') || 0); },
+  save(resp) {
+    const { access_token, refresh_token, expires_in } = resp || {};
+    if (access_token) localStorage.setItem('access_token', access_token);
+    if (refresh_token) localStorage.setItem('refresh_token', refresh_token);
+    if (expires_in) {
+      localStorage.setItem('expires_in', String(expires_in));
+      localStorage.setItem('expires', String(Date.now() + expires_in * 1000));
+    }
+  }
+};
 
 async function getToken(code) {
   const code_verifier = localStorage.getItem('code_verifier');
-  const response = await fetch(tokenEndpoint, {
+  const res = await fetch(tokenEndpoint, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
@@ -147,106 +130,156 @@ async function getToken(code) {
       code_verifier,
     }),
   });
-  return await response.json();
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
 }
-
-const currentToken = {
-  get access_token() { return localStorage.getItem('access_token') || null; },
-  get refresh_token() { return localStorage.getItem('refresh_token') || null; },
-  get expires_in()    { return localStorage.getItem('refresh_in') || null; },
-  get expires()       { return localStorage.getItem('expires') || null; },
-  save(response) {
-    const { access_token, refresh_token, expires_in } = response;
-    localStorage.setItem('access_token', access_token);
-    localStorage.setItem('refresh_token', refresh_token);
-    localStorage.setItem('expires_in',  expires_in);
-    const now = new Date();
-    const expiry = new Date(now.getTime() + (expires_in * 1000));
-    localStorage.setItem('expires', expiry);
+async function refreshToken() {
+  const rt = currentToken.refresh_token;
+  if (!rt) return;
+  const res = await fetch(tokenEndpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      client_id: clientId,
+      grant_type: 'refresh_token',
+      refresh_token: rt
+    })
+  });
+  if (!res.ok) throw new Error(await res.text());
+  currentToken.save(await res.json());
+}
+async function ensureFreshToken() {
+  if (!currentToken.access_token || Date.now() > currentToken.expires - 5000) {
+    await refreshToken();
   }
-};
-
-const args = new URLSearchParams(window.location.search);
-const code = args.get('code');
-if (code) {
-  const token = await getToken(code);
-  currentToken.save(token);
-  const url = new URL(window.location.href);
-  url.searchParams.delete("code");
-  const updatedUrl = url.search ? url.href : url.href.replace('?', '');
-  window.history.replaceState({}, document.title, updatedUrl);
+}
+async function fetchJson(url, init = {}) {
+  await ensureFreshToken();
+  const res = await fetch(url, init);
+  if (!res.ok) throw new Error(`${res.status} ${res.statusText}: ${await res.text()}`);
+  return res.json();
+}
+async function getUserData() {
+  return fetchJson('https://api.spotify.com/v1/me', {
+    headers: { Authorization: 'Bearer ' + currentToken.access_token }
+  });
 }
 
-if (!currentToken.access_token) {
-  window.location.replace("http://127.0.0.1:5173");
+const qp = new URLSearchParams(window.location.search);
+const authCode = qp.get('code');
+if (authCode) {
+  try {
+    const token = await getToken(authCode);
+    currentToken.save(token);
+    const url = new URL(window.location.href);
+    url.searchParams.delete('code');
+    window.history.replaceState({}, document.title, url.search ? url.href : url.href.replace('?', ''));
+  } catch (e) {
+    console.error('Token exchange failed:', e);
+  }
 }
 
-try {
-  const userData = await getUserData();
-
-  const verifyAccount = await fetch("http://127.0.0.1:3000/verifyaccount", {
+async function getAccountOrCreate(user) {
+  const verify = await fetch(`${API}/verifyaccount`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ id: userData.id })
+    body: JSON.stringify({ id: user.id })
   });
-  if (!verifyAccount.ok) {
-    const error = await verifyAccount.json();
-    throw new Error(error.error.message);
-  }
-  const account = await verifyAccount.json();
+  const v = await verify.json();
+  if (!verify.ok) throw new Error(v.error || 'verify failed');
 
-  if (!account.exists) {
-    const spotifyPlaylistEndpoint = `https://api.spotify.com/v1/users/${userData.id}/playlists`;
-    const reqBody = {
-      name: "VibeMatch Playlist",
-      description: "VibeMatch App playlist for preference match",
+  let playlistId;
+  if (!v.exists) {
+    const createReq = {
+      name: 'VibeMatch Playlist',
+      description: 'VibeMatch App playlist for preference match',
       public: false
     };
-    const playlistCreate = await fetch(spotifyPlaylistEndpoint, {
+    const plRes = await fetch(`https://api.spotify.com/v1/users/${user.id}/playlists`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': 'Bearer ' + currentToken.access_token
+        Authorization: 'Bearer ' + currentToken.access_token
       },
-      body: JSON.stringify(reqBody)
+      body: JSON.stringify(createReq)
     });
-    if (!playlistCreate.ok) {
-      const error = await playlistCreate.json();
-      throw new Error(error.error.message);
-    }
-    const playlistData = await playlistCreate.json();
+    if (!plRes.ok) throw new Error(await plRes.text());
+    const plJson = await plRes.json();
+    playlistId = plJson.id;
 
-    const accountCreate = await fetch("http://127.0.0.1:3000/createaccount", {
+    const accRes = await fetch(`${API}/createaccount`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...userData, playlist_id: playlistData.id })
+      body: JSON.stringify({
+        display_name: user.display_name,
+        email: user.email,
+        id: user.id,
+        playlist_id: playlistId
+      })
     });
-    if (!accountCreate.ok) {
-      const error = await accountCreate.json();
-      throw new Error(error.error.message);
-    }
+    const accJ = await accRes.json().catch(() => ({}));
+    if (!accRes.ok) throw new Error(accJ.error || 'create account failed');
   }
 
-  const accountData = await fetch("http://127.0.0.1:3000/login", {
+  const loginRes = await fetch(`${API}/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ id: userData.id })
-  }).then(r => r.json());
-
-  const playlist = await fetch(`https://api.spotify.com/v1/playlists/${accountData.playlist_id}`, {
-    method: 'GET',
-    headers: { 'Authorization': 'Bearer ' + currentToken.access_token }
-  }).then(r => r.json());
-
-  console.log(playlist);
-} catch (error) {
-  console.error("Error creating playlist:", error);
-}
-
-async function getUserData() {
-  const response = await fetch("https://api.spotify.com/v1/me", {
-    method: 'GET',
-    headers: { 'Authorization': 'Bearer ' + currentToken.access_token },
+    credentials: 'include',
+    body: JSON.stringify({ id: user.id })
   });
-  return await response.json();
+  const loginJ = await loginRes.json();
+  if (!loginRes.ok) throw new Error(loginJ.error || 'login failed');
+  return loginJ.playlist_id || playlistId;
 }
+
+function fillNavbar(user) {
+  const display = (user.display_name || user.id || '').trim();
+  const avatar = (user.images && user.images.length > 0) ? user.images[0].url : '';
+
+  localStorage.setItem('vm_display_name', display);
+  if (avatar) localStorage.setItem('vm_avatar_url', avatar);
+
+  if (profilePic) profilePic.src = avatar || '';
+  if (profileName) profileName.textContent = `Signed in as ${display}`;
+}
+
+async function loadAndRenderPlaylist(playlistId) {
+  const container = document.getElementById('spotify-playlist');
+  if (!container || !playlistId) return;
+
+  const fields = 'name,external_urls';
+  const pl = await fetchJson(
+    `https://api.spotify.com/v1/playlists/${playlistId}?fields=${encodeURIComponent(fields)}`,
+    { headers: { Authorization: 'Bearer ' + currentToken.access_token } }
+  );
+
+  const link = pl?.external_urls?.spotify || null;
+  container.innerHTML = '';
+  const a = document.createElement('a');
+  a.textContent = pl?.name || 'VibeMatch Playlist';
+  if (link) {
+    a.href = link;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+  }
+  container.appendChild(a);
+}
+
+(async function init() {
+  if (!currentToken.access_token) {
+    window.location.replace('http://127.0.0.1:5173');
+    return;
+  }
+
+  try {
+    const user = await getUserData();
+    fillNavbar(user);
+
+    const playlistId = await getAccountOrCreate(user);
+    localStorage.setItem('vm_playlist_id', playlistId || '');
+
+    await loadAndRenderPlaylist(playlistId);
+  } catch (e) {
+    console.error(e);
+  }
+})();
