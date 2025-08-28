@@ -274,3 +274,5 @@ async function loadAndRenderPlaylists() {
     console.error(e);
   }
 })();
+
+export { fetchJson, currentToken }
