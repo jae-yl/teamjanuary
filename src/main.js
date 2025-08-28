@@ -265,6 +265,26 @@ async function loadAndRenderPlaylist(playlistId) {
   container.appendChild(a);
 }
 
+async function getArtistGenreData(id) {
+  const res = await fetch(`https://api.spotify.com/v1/artists/${id}`, {
+      headers: {'Authorization': `Bearer ${currentToken.access_token}`}
+  });
+  return res.json();
+}
+
+async function getGenreDataFromList(artists) {
+  let out = [];
+
+  for (const artist of artists) {
+    const artistData = await getArtistGenreData(artist.id);
+    for (const genre of artistData.genres) {
+      out.push(genre);
+    }
+  }
+
+  return out;
+}
+
 (async function init() {
   if (!currentToken.access_token) {
     window.location.replace('http://127.0.0.1:5173');
