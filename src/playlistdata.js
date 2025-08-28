@@ -1,33 +1,12 @@
-import { fetchJson, currentToken } from "./main.js";
+import { fetchJson, currentToken, socket } from "./main.js";
 
-// ========== Find Match ==========
-document.getElementById('findMatchButton')?.addEventListener('click', async () => {
-    console.log("find match clicked");
+const matchStatusEl = document.getElementById('matchStatus');       
+const cancelMatchBtn = document.getElementById('cancelMatchButton'); 
 
-    const playlistUrl = document.getElementById('playlistUrl').value;
-    if (!playlistUrl) {
-        console.warn('No playlist URL provided');
-        return;
-    }
-
-    const playlistData = await getPlaylistFromUrl(playlistUrl, currentToken.access_token);
-    console.log('Client validated playlist:', playlistData?.name, playlistData?.id);
-    console.log('Playlist data:', playlistData);
-
-    const trackData = await getTrackDataFromPlaylist(playlistData);
-    console.log('Track data:', trackData);
-
-    fetch('http://127.0.0.1:3000/findmatch', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify(trackData)
-    }).then(res => {
-        if (!res.ok) return res.json().then(e => { throw new Error(e.error); });
-        return res.json();
-    }).then(data => {
-        console.log("Match found:", data);
-    }).catch(console.error);
+cancelMatchBtn?.addEventListener('click', () => {
+  if (matchState !== MatchState.QUEUING) return;
+  socket.emit('cancel_queue');
+  setMatchState(MatchState.IDLE);
 });
 
 async function getPlaylistFromUrl(playlistUrl, accessToken) {
@@ -97,3 +76,78 @@ async function getTrackDataFromPlaylist(playlistData) {
 
   return data;
 }
+
+const MatchState = Object.freeze({ IDLE: 'idle', QUEUING: 'queueing', CHATTING: 'chatting' });
+let matchState = MatchState.IDLE;
+
+function setMatchState(next) {
+  matchState = next;
+  if (matchStatusEl) {
+    matchStatusEl.textContent =
+      next === MatchState.QUEUING ? 'Looking for a match…' :
+      next === MatchState.CHATTING ? '' : '';
+  }
+  if (cancelMatchBtn) cancelMatchBtn.style.display = (next === MatchState.QUEUING) ? '' : 'none';
+}
+
+socket.off('queued');
+socket.on('queued', () => {
+  // Still waiting — UI already shows "Looking for a match…"
+});
+
+socket.off('match_error');
+socket.on('match_error', (msg) => {
+  console.warn('match_error:', msg);
+  setMatchState(MatchState.IDLE);
+  if (matchStatusEl) matchStatusEl.textContent = 'Could not find a match.';
+});
+
+// When matched, tell the chat UI to switch rooms.
+socket.off('matched');
+socket.on('matched', ({ room, users }) => {
+  console.log('Matched:', room, users);
+  setMatchState(MatchState.CHATTING);
+
+  // Let main.js (chat UI) know which room to join.
+  // It can listen for this event and call its existing joinRoom(room).
+  window.dispatchEvent(new CustomEvent('vibematch:matched', { detail: { room, users } }));
+
+  // Also persist so a soft refresh can restore the DM
+  try { localStorage.setItem('vm_matched_room', room); } catch {}
+});
+
+document.getElementById('findMatchButton')?.addEventListener('click', async () => {
+  try {
+    console.log("find match clicked");
+
+    const playlistUrl = document.getElementById('playlistUrl')?.value?.trim();
+    if (!playlistUrl) {
+      console.warn('No playlist URL provided');
+      return;
+    }
+
+    // Pull playlist + derive tracks/artists/albums/genres
+    const playlistData = await getPlaylistFromUrl(playlistUrl, currentToken.access_token);
+    console.log('Client validated playlist:', playlistData?.name, playlistData?.id);
+
+    const trackData = await getTrackDataFromPlaylist(playlistData);
+    console.log('Track data:', trackData);
+
+    // Build lean preference payload for the server’s matcher
+    const prefs = {
+      playlist_id: playlistData?.id || null,
+      tracks:  [...new Set(trackData.tracks.map(t => t.id).filter(Boolean))],
+      artists: [...new Set(trackData.artists.map(a => a.id).filter(Boolean))],
+      albums:  [...new Set(trackData.albums.map(a => a.id).filter(Boolean))],
+      genres:  [...new Set(trackData.genres.filter(Boolean))]
+    };
+
+    // Queue for a match over Socket.IO (same socket instance as main.js)
+    socket.emit('queue_for_match', prefs);
+    setMatchState(MatchState.QUEUING);
+
+  } catch (e) {
+    console.error(e);
+    setMatchState(MatchState.IDLE);
+  }
+});

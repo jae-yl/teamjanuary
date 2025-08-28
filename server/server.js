@@ -51,10 +51,10 @@ app.use(cors({
 }));
 
 // Session middleware
-app.use(session({
-  store: new pgSession({
-    pool,
-    tableName: 'session'
+const sessionMiddleware = session({
+  store: new pgSession({ 
+    pool, 
+    tableName: 'session' 
   }),
   secret: env.SESSION_SECRET,
   resave: false,
@@ -64,7 +64,9 @@ app.use(session({
     secure: false,
     maxAge: 1000 * 60 * 60 * 12
   }
-}));
+});
+
+app.use(sessionMiddleware);
 
 app.listen(3000, '127.0.0.1', () => {
   console.log('Server is running on http://127.0.0.1:3000');
@@ -143,11 +145,12 @@ app.post("/logout", (req, res) => {
 });
 
 app.post("/findmatch", (req, res) => {
-  const { titles, artists, albums } = req.body;
+  const { titles, artists, albums, genres } = req.body;
 
   console.log('titles:', titles);
   console.log('artists:', artists);
   console.log('albums:', albums);
+  console.log('genres:', genres);
 
   try {
     console.log("Session data:", req.session);
@@ -167,8 +170,13 @@ const io = new Server(server, {
   }
 });
 
+io.use((socket, next) => sessionMiddleware(socket.request, {}, next));
+
 io.on("connection", (socket) => {
   console.log("User connected:", socket.id);
+
+  const uid = socket.request?.session?.user?.id;
+  if (uid) userIdBySocket.set(socket.id, String(uid));
 
   // JOIN: load last 50 messages (oldest → newest) for this room
   socket.on("join_room", async (room) => {
@@ -212,7 +220,7 @@ socket.on("send_message", async (data = {}) => {
     console.log("INSERT rowCount →", result.rowCount);
 
     // send to everyone else (prevents double bubble for sender)
-// send to everyone else (prevents double bubble for sender)
+
 socket.to(room).emit("receive_message", {
   room,
   username,                 // new shape
@@ -229,9 +237,108 @@ socket.to(room).emit("receive_message", {
   }
 });
 
-  socket.on("disconnect", () => {
-    console.log("User disconnected:", socket.id);
-  });
+// ─────────────── MATCHMAKING ───────────────
+const waitingByUserId = new Map(); // userId -> { socketId, queuedAt, prefs }
+const userIdBySocket  = new Map(); // socketId -> userId
+
+function toSets(p = {}) {
+  const asSet = (x = []) => new Set(x);
+  return {
+    tracks:  asSet(p.tracks),
+    albums:  asSet(p.albums),
+    artists: asSet(p.artists),
+    genres:  asSet((p.genres || []).map(g => g.toLowerCase())) // normalize genres
+  };
+}
+
+function roomIdForPair(a, b) {
+  const [x, y] = [String(a), String(b)].sort();
+  return `dm:${x}:${y}`;
+}
+
+socket.on("queue_for_match", async (prefs = {}) => {
+  const sessUser = socket.request?.session?.user;
+  if (!sessUser?.id) {
+    socket.emit("match_error", "Not logged in");
+    return;
+  }
+  const me = String(sessUser.id);
+
+  // do nothing if already queued
+  if (waitingByUserId.has(me)) {
+    socket.emit("queued");
+    return;
+  }
+
+  const mySets = toSets(prefs);
+
+  let best = null; // { uid, entry, score }
+  for (const [uid, entry] of waitingByUserId) {
+    if (uid === me) continue;
+    const oSets = entry.sets || toSets(entry.prefs || {});
+    const s = scoreMatch(mySets, oSets);
+
+    if (isBetter(s, best?.score, entry.queuedAt, best?.entry?.queuedAt)) {
+      best = { uid, entry, score: s };
+    }
+  }
+
+  const partnerId = best?.uid ?? null;
+
+  // enqueue if nobody else waiting
+  if (!partnerId) {
+    waitingByUserId.set(me, {
+      socketId: socket.id,
+      queuedAt: Date.now(),
+      prefs,
+      sets: mySets
+    });
+    socket.emit("queued");
+    return;
+  }
+
+  const partnerEntry = waitingByUserId.get(partnerId);
+  waitingByUserId.delete(partnerId);
+
+  const partnerSocket = io.sockets.sockets.get(partnerEntry.socketId);
+  if (!partnerSocket) {
+    // partner vanished; so re-queue
+    waitingByUserId.set(me, { socketId: socket.id, queuedAt: Date.now(), prefs });
+    socket.emit("queued");
+    return;
+  }
+
+  // create/join room for both users
+  const room = roomIdForPair(me, partnerId);
+  socket.join(room);
+  partnerSocket.join(room);
+
+  // Optional: include partner display names
+  const meInfo     = { id: me, display_name: sessUser.display_name };
+  const partnerSes = partnerSocket.request?.session?.user;
+  const themInfo   = { id: partnerId, display_name: partnerSes?.display_name };
+
+  io.to(room).emit("matched", { room, users: [meInfo, themInfo] });
+
+  socket.emit('join_room', room)
+});
+
+socket.on("cancel_queue", () => {
+  const uid = userIdBySocket.get(socket.id);
+  if (uid && waitingByUserId.has(uid)) {
+    waitingByUserId.delete(uid);
+    socket.emit("queue_canceled");
+  }
+});
+
+socket.on("disconnect", () => {
+  const uid = userIdBySocket.get(socket.id);
+  if (uid) {
+    waitingByUserId.delete(uid);
+    userIdBySocket.delete(socket.id);
+  }
+  console.log("User disconnected:", socket.id);
+});
 });
 
 // ──────────────── SERVER ────────────────
@@ -239,4 +346,3 @@ socket.to(room).emit("receive_message", {
 server.listen(3001, '127.0.0.1', () => {
   console.log("Socket server running at http://127.0.0.1:3001");
 });
-

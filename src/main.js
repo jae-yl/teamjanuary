@@ -72,6 +72,16 @@ socket.on('receive_message', (data) => {
   if (!mine) addMessage({ text: data.msg, who: 'them', user: data.user, timestamp: data.timestamp || Date.now() });
 });
 
+window.addEventListener('vibematch:matched', (e) => {
+  const { room, users } = e.detail || {};
+  if (!room) return;
+
+  const myId  = localStorage.getItem('vm_user_id') || '';
+  const other = (users || []).find(u => String(u.id) !== String(myId));
+  if (title) title.textContent = other?.display_name ? `DM with ${other.display_name}` : room;
+  joinRoom(room, null);
+});
+
 const API = 'http://127.0.0.1:3000';
 const profilePic = document.getElementById('profile-pic');
 const profileName = document.getElementById('profile-name');
@@ -284,4 +294,4 @@ async function loadAndRenderPlaylist(playlistId) {
   }
 })();
 
-export { fetchJson, currentToken }
+export { fetchJson, currentToken, socket }
