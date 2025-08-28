@@ -84,7 +84,7 @@ body {
   margin: 0 auto;
 }
 
-.spotify-playlist-column,
+#spotify-playlist-column,
 .main-chat-window,
 .chat-rooms {
   background: var(--spotify-dark);

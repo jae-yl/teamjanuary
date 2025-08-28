@@ -254,8 +254,17 @@ async function loadAndRenderPlaylists() {
   }).catch(e => {
     container.innerHTML = e.message;
   });
-
 }
+
+// when you click on a playlist card
+document.getElementById('spotify-playlist-column').addEventListener('click', (e) => {
+  const card = e.target.closest('.card');
+  if (!card) return;
+
+  const pid = card.getAttribute('data-playlist-id');
+  // maybe add a "selected" class so that it looks different
+  console.log(pid);
+}, false);
 
 (async function init() {
   if (!currentToken.access_token) {
