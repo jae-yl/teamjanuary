@@ -167,6 +167,9 @@ const io = new Server(server, {
   }
 });
 
+// Collaborative playlist state for each room
+const collaborativePlaylists = {};
+
 io.on("connection", (socket) => {
   console.log("User connected:", socket.id);
 
@@ -229,6 +232,59 @@ socket.to(room).emit("receive_message", {
   }
 });
 
+  // When a collaborative playlist is created
+  socket.on("create_collab_playlist", (data) => {
+    const { room, playlistId, playlistName, playlistUrl } = data;
+    if (!room || !playlistId) return;
+
+    // Store playlist state in memory
+    collaborativePlaylists[room] = {
+      playlistId,
+      playlistName,
+      playlistUrl,
+      songs: []
+    };
+
+    // Notify everyone in the room
+    io.to(room).emit("collab_playlist_created", {
+      room,
+      playlistId,
+      playlistName,
+      playlistUrl
+    });
+  });
+
+  // When a song is added to the collaborative playlist
+  socket.on("add_song", (data) => {
+    const { room, songName, user } = data;
+    if (!room || !songName) return;
+
+    // Keep track of songs for late joiners
+    if (collaborativePlaylists[room]) {
+      collaborativePlaylists[room].songs.push(songName);
+    }
+
+    // Broadcast to everyone in the room
+    io.to(room).emit("song_added", {
+      room,
+      songName,
+      user
+    });
+  });
+
+  // Provide current playlist + songs to late joiners
+  socket.on("request_collab_state", (data) => {
+    const { room } = data;
+    if (!room) return;
+
+    const playlistState = collaborativePlaylists[room] || {};
+    socket.emit("collab_state", {
+      room,
+      ...playlistState,
+      songs: playlistState.songs || []
+    });
+  });
+
   socket.on("disconnect", () => {
     console.log("User disconnected:", socket.id);
   });
@@ -239,4 +295,3 @@ socket.to(room).emit("receive_message", {
 server.listen(3001, '127.0.0.1', () => {
   console.log("Socket server running at http://127.0.0.1:3001");
 });
-

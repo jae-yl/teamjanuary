@@ -77,10 +77,10 @@ body {
 /* [spotify] [chat] [chatrooms] */
 .dashboard-container {
   display: grid;
-  grid-template-columns: 1fr 1.6fr 1fr;
+  grid-template-columns: 1fr 1fr 1fr 1fr; /* Four equal columns */
   gap: 16px;
   padding: 16px;
-  max-width: 1400px;
+  max-width: 1600px; /* slightly increased for four columns */
   margin: 0 auto;
 }
 
@@ -243,5 +243,21 @@ body {
 .chat__messages .msg__meta {
   margin-top: 6px;
   font-size: 12px;
+  color: var(--spotify-gray-light);
+}
+.collaborative-playlist-section {
+  background: var(--spotify-dark);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 14px;
+  min-height: 70vh;
+  backdrop-filter: blur(6px);
+  color: var(--spotify-gray-light);
+}
+
+.collaborative-playlist-header {
+  margin: 6px 2px 12px;
+  font-size: 16px;
+  font-weight: 600;
   color: var(--spotify-gray-light);
 }

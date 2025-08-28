@@ -37,6 +37,126 @@ function getChatUsername() {
 }
 
 let currentRoom = null;
+let currentPlaylistId = null;
+
+const createCollabBtn = document.getElementById('create-collab-playlist-btn');
+const collabPlaylistDisplay = document.getElementById('collab-playlist-display');
+const addSongBtn = document.getElementById('add-song-btn');
+const songUrlInput = document.getElementById('spotify-song-url');
+const collaborativeSongList = document.getElementById('collaborative-song-list');
+const collabFeedback = document.getElementById('collab-playlist-feedback');
+const copyCollabLinkBtn = document.getElementById('copy-collab-link-btn');
+const copyLinkFeedback = document.getElementById('copy-link-feedback');
+let currentPlaylistUrl = null; // store URL globally
+
+// Create a collaborative playlist on Spotify and share via socket
+async function createCollaborativePlaylist() {
+  try {
+    const user = await getUserData();
+    const createReq = {
+      name: `VibeMatch Collab - ${currentRoom}`,
+      description: `Collaborative playlist for ${currentRoom}`,
+      public: false,
+      collaborative: true
+    };
+    const res = await fetch(`https://api.spotify.com/v1/users/${user.id}/playlists`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer ' + currentToken.access_token
+      },
+      body: JSON.stringify(createReq)
+    });
+    if (!res.ok) throw new Error(await res.text());
+    const playlist = await res.json();
+    currentPlaylistId = playlist.id;
+    
+    // Broadcast playlist creation to others in the room
+    socket.emit('create_collab_playlist', { room: currentRoom, playlistId: currentPlaylistId });
+
+    // Render the link for both users
+    renderCollaborativePlaylist(playlist.name, playlist.external_urls.spotify);
+
+    collabFeedback.textContent = 'Collaborative playlist created!';
+  } catch (e) {
+    console.error('Error creating playlist:', e);
+    collabFeedback.textContent = 'Failed to create collaborative playlist.';
+  }
+}
+
+function renderCollaborativePlaylist(name, url) {
+  collabPlaylistDisplay.innerHTML = '';
+  currentPlaylistUrl = url; // Save the URL globally
+
+  const a = document.createElement('a');
+  a.textContent = name;
+  a.href = url;
+  a.target = '_blank';
+  a.rel = 'noopener noreferrer';
+  collabPlaylistDisplay.appendChild(a);
+}
+function copyCollaborativeLink() {
+  if (!currentPlaylistUrl) {
+    copyLinkFeedback.textContent = 'No playlist link available.';
+    return;
+  }
+
+  navigator.clipboard.writeText(currentPlaylistUrl)
+    .then(() => {
+      copyLinkFeedback.textContent = 'Collaborative link copied!';
+      setTimeout(() => copyLinkFeedback.textContent = '', 2500);
+    })
+    .catch(err => {
+      console.error('Error copying link:', err);
+      copyLinkFeedback.textContent = 'Failed to copy link.';
+    });
+}
+
+copyCollabLinkBtn?.addEventListener('click', copyCollaborativeLink);
+
+async function addSongToPlaylist() {
+  const url = songUrlInput.value.trim();
+  if (!url || !currentPlaylistId) return;
+  const match = url.match(/track\/([a-zA-Z0-9]+)/);
+  if (!match) {
+    collabFeedback.textContent = 'Invalid Spotify track URL';
+    return;
+  }
+  const trackUri = `spotify:track:${match[1]}`;
+
+  try {
+    const res = await fetch(`https://api.spotify.com/v1/playlists/${currentPlaylistId}/tracks`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer ' + currentToken.access_token
+      },
+      body: JSON.stringify({ uris: [trackUri] })
+    });
+    if (!res.ok) throw new Error(await res.text());
+    const trackName = await fetch(`https://api.spotify.com/v1/tracks/${match[1]}`, {
+      headers: { Authorization: 'Bearer ' + currentToken.access_token }
+    }).then(r => r.json()).then(d => d.name);
+
+    // Notify other users in the room
+    socket.emit('add_song', { room: currentRoom, songName: trackName, user: getChatUsername() });
+
+    // Append song to UI
+    const li = document.createElement('li');
+    li.textContent = trackName;
+    collaborativeSongList.appendChild(li);
+
+    collabFeedback.textContent = `Added: ${trackName}`;
+    songUrlInput.value = '';
+  } catch (e) {
+    console.error('Error adding song:', e);
+    collabFeedback.textContent = 'Failed to add song.';
+  }
+}
+
+createCollabBtn?.addEventListener('click', createCollaborativePlaylist);
+addSongBtn?.addEventListener('click', addSongToPlaylist);
+
 function joinRoom(room, card = null) {
   if (!room) return;
   if (currentRoom) socket.emit('leave_room', currentRoom);
@@ -45,6 +165,11 @@ function joinRoom(room, card = null) {
   clearMessages();
   if (title) title.textContent = `${currentRoom}`;
   if (card) roomCards.forEach(c => c.classList.toggle('active', c === card));
+  // Request current playlist for this room
+  socket.emit('request_collab_playlist', currentRoom);
+
+  // Request playlist + current songs for new joiners
+  socket.emit('request_collab_state', { room: currentRoom });
 }
 roomCards.forEach((card, i) => {
   const room = `chat-room-${i + 1}`;
@@ -72,6 +197,44 @@ socket.on('receive_message', (data) => {
   if (!mine) addMessage({ text: data.msg, who: 'them', user: data.user, timestamp: data.timestamp || Date.now() });
 });
 
+// Collaborative playlist socket handlers
+socket.on('collab_playlist_created', (data) => {
+  if (data.room !== currentRoom) return;
+  currentPlaylistId = data.playlistId;
+  loadAndRenderPlaylist(currentPlaylistId);
+  renderCollaborativePlaylist(data.playlistName, data.playlistUrl);
+});
+
+socket.on('song_added', (data) => {
+  if (data.room !== currentRoom) return;
+  const li = document.createElement('li');
+  li.textContent = data.songName;
+  collaborativeSongList.appendChild(li);
+  addMessage({ text: `Song added: ${data.songName}`, who: 'them', user: data.user });
+});
+
+// When joining a room, server sends current playlist + songs
+socket.on('collab_state', (data) => {
+  if (data.room !== currentRoom) return;
+
+  // Update playlist UI if one exists
+  if (data.playlistId && data.playlistName && data.playlistUrl) {
+    currentPlaylistId = data.playlistId;
+    renderCollaborativePlaylist(data.playlistName, data.playlistUrl);
+  }
+
+  // Populate existing songs if any
+  if (Array.isArray(data.songs)) {
+    collaborativeSongList.innerHTML = '';
+    data.songs.forEach(song => {
+      const li = document.createElement('li');
+      li.textContent = song;
+      collaborativeSongList.appendChild(li);
+    });
+  }
+});
+
+// ----- Spotify auth flow (unchanged) -----
 const API = 'http://127.0.0.1:3000';
 const profilePic = document.getElementById('profile-pic');
 const profileName = document.getElementById('profile-name');
@@ -96,7 +259,6 @@ signOutBtn?.addEventListener('click', async () => {
   window.location.href = './index.html?m=lO';
 });
 
-// ----- Spotify auth flow (unchanged) -----
 const clientId = '4a01c36424064f4fb31bf5d5b586eb1f';
 const redirectUrl = 'http://127.0.0.1:5173/dashboard.html';
 const tokenEndpoint = 'https://accounts.spotify.com/api/token';
@@ -245,7 +407,10 @@ function fillNavbar(user) {
 
 async function loadAndRenderPlaylist(playlistId) {
   const container = document.getElementById('spotify-playlist');
-  if (!container || !playlistId) return;
+  if (!container || !playlistId) {
+    container.innerHTML = '';
+    return;
+  }
 
   const fields = 'name,external_urls';
   const pl = await fetchJson(

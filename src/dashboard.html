@@ -27,16 +27,50 @@
     </nav>
 
     <div class="dashboard-container">
-        <div class="spotify-playlist-column">
-            <h2 class="spotify-playlist-header">
-                Spotify Playlist
-            </h2>
-            <div id="spotify-playlist" class="playlist-container">
-            </div>
-        <input type="url" name="playlistUrl" id="playlistUrl" placeholder="https://open.spotify.com/playlist/..." pattern="https://open.spotify.com/playlist/.*" />
-        </div>
 
-        <div class="main-chat-window">
+        <!-- Collaborative Playlist Section -->
+        <section class="collaborative-playlist-section">
+            <h2 class="collaborative-playlist-header">Collaborative Playlists</h2>
+            <div id="collaborative-playlist-container" class="playlist-container">
+
+                <button id="create-collab-playlist-btn" class="btn">
+                    Create Collaborative Playlist
+                </button>
+                <div id="collab-playlist-feedback"></div>
+
+                <div id="collab-playlist-status"></div>
+                <div id="collab-playlist-display"></div>
+<button id="copy-collab-link-btn" class="btn">Copy Collaborative Link</button>
+<div id="copy-link-feedback" class="feedback"></div>
+                <div class="collab-actions">
+                    <input 
+                        type="url" 
+                        id="spotify-song-url" 
+                        placeholder="Paste Spotify track URL"
+                    />
+                    <button id="add-song-btn" class="btn">Add Song</button>
+                </div>
+
+                <ul id="collaborative-song-list"></ul>
+            </div>
+        </section>
+
+        <!-- Spotify Playlist Section -->
+        <section class="spotify-playlist-column">
+            <h2 class="spotify-playlist-header">Spotify Playlist</h2>
+            <div id="spotify-playlist" class="playlist-container"></div>
+            <div id="collab-playlist-display"></div>
+            <input 
+                type="url" 
+                name="playlistUrl" 
+                id="playlistUrl" 
+                placeholder="https://open.spotify.com/playlist/..." 
+                pattern="https://open.spotify.com/playlist/.*" 
+            />
+        </section>
+
+        <!-- Main Chat Window -->
+        <section class="main-chat-window">
             <div class="chat">
                 <header class="chat__header">
                     <div>
@@ -44,22 +78,24 @@
                     </div>
                 </header>
                 <main class="chat__messages" aria-live="polite" aria-label="Chat messages">
-
                 </main>
                 <footer class="chat__composer">
                     <input class="chat__input" type="text" placeholder="Type a message…" />
                     <button class="chat__send">Send</button>
                 </footer>
             </div>
-        </div>
+        </section>
 
-        <div class="chat-rooms">
+        <!-- Chat Rooms Section -->
+        <section class="chat-rooms">
             <h2 class="chat-room-header">Chat Rooms</h2>
             <div class="chat-room-card">chat room 1</div>
             <div class="chat-room-card">chat room 2</div>
-        </div>
+        </section>
+
     </div>
 
     <script type="module" src="main.js"></script>
 </body>
+
 </html>
