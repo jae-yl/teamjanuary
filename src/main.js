@@ -12,7 +12,6 @@ const sendBtn = document.querySelector('.main-chat-window .chat__send');
 const title = document.querySelector('.main-chat-window .chat__title');
 const chatRoomsContainer = document.getElementById('chat-rooms');
 
-
 function timeNow(ts = Date.now()) {
   return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
@@ -50,7 +49,7 @@ function joinRoom(room, card = null) {
 function sendMessage() {
   const user = getChatUsername();
   const msg = (input?.value || '').trim();
-  if (!user || !msg || !currentRoom) return;
+  if (!user || !msg || currentRoom === null) return;
 
   addMessage({ text: msg, who: 'me', user });
   socket.emit('send_message', { room: currentRoom, user, msg });
@@ -210,7 +209,6 @@ async function getAccountOrCreate(user) {
     let chatRoomsDiv = document.getElementById('chat-room-template');
 
     for (let chatRoom of r.chats || []) {
-      console.log(chatRoom);
       const chatRoomCard = chatRoomsDiv.content.cloneNode(true);
       chatRoomCard.querySelector('.chat-room-card').textContent = chatRoom.display_name;
       chatRoomCard.querySelector('.chat-room-card').setAttribute('data-room-id', chatRoom.chat_room_id);
