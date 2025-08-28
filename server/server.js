@@ -88,14 +88,14 @@ app.post("/verifyaccount", async (req, res) => {
 
 app.post("/createaccount", async (req, res) => {
   try {
-    const { display_name, email, id, playlist_id } = req.body;
-    if (!display_name || !email || !id || !playlist_id) {
-      throw new Error("display_name, email, id, or playlist id not found");
+    const { display_name, email, id } = req.body;
+    if (!display_name || !email || !id ) {
+      throw new Error("display_name, or email not found");
     }
 
     await pool.query(
-      "INSERT INTO ud (id, display_name, email, playlist_id) VALUES ($1, $2, $3, $4);",
-      [id, display_name, email, playlist_id]
+      "INSERT INTO ud (id, display_name, email) VALUES ($1, $2, $3);",
+      [id, display_name, email]
     );
 
     return res.status(200).json({ status: "ok" });
@@ -121,12 +121,11 @@ app.post("/login", async (req, res) => {
       id: accountData.id,
       display_name: accountData.display_name,
       email: accountData.email,
-      playlist_id: accountData.playlist_id
     };
 
     req.session.save(err => {
       if (err) return res.status(500).json({ error: "Could not save session" });
-      return res.status(200).json({ playlist_id: accountData.playlist_id });
+      return res.status(200).json({});
     });
   } catch (e) {
     return res.status(400).json({ error: e.message, where: 'post' });

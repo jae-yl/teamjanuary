@@ -200,23 +200,6 @@ async function getAccountOrCreate(user) {
 
   let playlistId;
   if (!v.exists) {
-    const createReq = {
-      name: 'VibeMatch Playlist',
-      description: 'VibeMatch App playlist for preference match',
-      public: false
-    };
-    const plRes = await fetch(`https://api.spotify.com/v1/users/${user.id}/playlists`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: 'Bearer ' + currentToken.access_token
-      },
-      body: JSON.stringify(createReq)
-    });
-    if (!plRes.ok) throw new Error(await plRes.text());
-    const plJson = await plRes.json();
-    playlistId = plJson.id;
-
     const accRes = await fetch(`${API}/createaccount`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -224,13 +207,13 @@ async function getAccountOrCreate(user) {
         display_name: user.display_name,
         email: user.email,
         id: user.id,
-        playlist_id: playlistId
       })
     });
     const accJ = await accRes.json().catch(() => ({}));
     if (!accRes.ok) throw new Error(accJ.error || 'create account failed');
   }
-
+  
+  // Login and store account info in session
   const loginRes = await fetch(`${API}/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -253,27 +236,45 @@ function fillNavbar(user) {
   if (profileName) profileName.textContent = `Signed in as ${display}`;
 }
 
-async function loadAndRenderPlaylist(playlistId) {
+async function loadAndRenderPlaylists() {
   const container = document.getElementById('spotify-playlist');
-  if (!container || !playlistId) return;
+  if (!container) return;
 
-  const fields = 'name,external_urls';
-  const pl = await fetchJson(
-    `https://api.spotify.com/v1/playlists/${playlistId}?fields=${encodeURIComponent(fields)}`,
-    { headers: { Authorization: 'Bearer ' + currentToken.access_token } }
-  );
+  await fetchJson(`https://api.spotify.com/v1/me/playlists?limit=10&offset=0`, {
+    method: 'GET',
+    headers: { Authorization: 'Bearer ' + currentToken.access_token },
+  }).then(playlistsData => {
+    console.log(playlistsData);
+    if (playlistsData.items.length == 0) throw new Error('No playlists found');
 
-  const link = pl?.external_urls?.spotify || null;
-  container.innerHTML = '';
-  const a = document.createElement('a');
-  a.textContent = pl?.name || 'VibeMatch Playlist';
-  if (link) {
-    a.href = link;
-    a.target = '_blank';
-    a.rel = 'noopener noreferrer';
-  }
-  container.appendChild(a);
+    let playlistDiv = document.getElementById('playlist-template');
+    container.innerHTML = ''; // clear playlist div
+
+    for (let playlist of playlistsData.items) {
+      // show playlists on dashboard
+      const playlistCard = playlistDiv.content.cloneNode(true);
+      playlistCard.querySelector('.card-image').src = playlist.images[0]?.url || '';
+      playlistCard.querySelector('.card-title').textContent = playlist.name || 'Untitled';
+      playlistCard.querySelector('.card').setAttribute('data-playlist-id', playlist.id);
+      container.appendChild(playlistCard);
+
+      // store all playlist data for easy access later
+      localStorage.setItem(`playlist_${playlist.id}`, JSON.stringify({ id: playlist.id, name: playlist.name }));
+    }
+  }).catch(e => {
+    container.innerHTML = e.message;
+  });
 }
+
+// when you click on a playlist card
+document.getElementById('spotify-playlist-column').addEventListener('click', (e) => {
+  const card = e.target.closest('.card');
+  if (!card) return;
+
+  const pid = card.getAttribute('data-playlist-id');
+  // maybe add a "selected" class so that it looks different
+  console.log(pid);
+}, false);
 
 (async function init() {
   if (!currentToken.access_token) {
@@ -285,10 +286,9 @@ async function loadAndRenderPlaylist(playlistId) {
     const user = await getUserData();
     fillNavbar(user);
 
-    const playlistId = await getAccountOrCreate(user);
-    localStorage.setItem('vm_playlist_id', playlistId || '');
+    await getAccountOrCreate(user);
 
-    await loadAndRenderPlaylist(playlistId);
+    await loadAndRenderPlaylists();
   } catch (e) {
     console.error(e);
   }

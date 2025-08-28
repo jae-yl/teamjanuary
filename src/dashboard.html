@@ -27,14 +27,27 @@
     </nav>
 
     <div class="dashboard-container">
-        <div class="spotify-playlist-column">
+        <div id="spotify-playlist-column">
             <h2 class="spotify-playlist-header">
-                Spotify Playlist
+                Spotify Playlists
             </h2>
+
             <div id="spotify-playlist" class="playlist-container">
+                <template id="playlist-template">
+                    <div class="card mb-3 rounded-3 playlist-card">
+                        <div class="row g-0 align-items-center">
+                            <div class="col-auto">
+                                <img class="card-image img-fluid rounded-3" src="" alt="Playlist cover image" style="width: 100px; height: 100px; object-fit: cover;">
+                            </div>
+                            <div class="col">
+                                <div class="card-body">
+                                    <h5 class="card-title text-black">  </h5>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </template>
             </div>
-        <input type="url" name="playlistUrl" id="playlistUrl" placeholder="https://open.spotify.com/playlist/..." pattern="https://open.spotify.com/playlist/.*" />
-        <button id="findMatchButton">Find Match</button>
         </div>
 
         <div class="main-chat-window">
