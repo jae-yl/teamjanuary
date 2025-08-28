@@ -10,7 +10,8 @@ const messages = document.querySelector('.main-chat-window .chat__messages');
 const input = document.querySelector('.main-chat-window .chat__input');
 const sendBtn = document.querySelector('.main-chat-window .chat__send');
 const title = document.querySelector('.main-chat-window .chat__title');
-const roomCards = Array.from(document.querySelectorAll('.chat-rooms .chat-room-card'));
+const chatRoomsContainer = document.getElementById('chat-rooms');
+
 
 function timeNow(ts = Date.now()) {
   return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -38,19 +39,13 @@ function getChatUsername() {
 
 let currentRoom = null;
 function joinRoom(room, card = null) {
-  if (!room) return;
+  if (room === null) return;
   if (currentRoom) socket.emit('leave_room', currentRoom);
   currentRoom = room;
   socket.emit('join_room', currentRoom);
   clearMessages();
-  if (title) title.textContent = `${currentRoom}`;
-  if (card) roomCards.forEach(c => c.classList.toggle('active', c === card));
+  if (title) title.textContent = `Chat ${card}`;
 }
-roomCards.forEach((card, i) => {
-  const room = `chat-room-${i + 1}`;
-  card.addEventListener('click', () => joinRoom(room, card));
-});
-if (!currentRoom) joinRoom('chat-room-1', roomCards[0] || null);
 
 function sendMessage() {
   const user = getChatUsername();
@@ -188,7 +183,6 @@ async function getAccountOrCreate(user) {
   const v = await verify.json();
   if (!verify.ok) throw new Error(v.error || 'verify failed');
 
-  let playlistId;
   if (!v.exists) {
     const accRes = await fetch(`${API}/createaccount`, {
       method: 'POST',
@@ -204,15 +198,29 @@ async function getAccountOrCreate(user) {
   }
   
   // Login and store account info in session
-  const loginRes = await fetch(`${API}/login`, {
+  await fetch(`${API}/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'include',
     body: JSON.stringify({ id: user.id })
+  }).then(r => {
+    if (!r.ok) throw new Error('Login failed');
+    return r.json();
+  }).then(r => {
+    let chatRoomsDiv = document.getElementById('chat-room-template');
+
+    for (let chatRoom of r.chats || []) {
+      console.log(chatRoom);
+      const chatRoomCard = chatRoomsDiv.content.cloneNode(true);
+      chatRoomCard.querySelector('.chat-room-card').textContent = chatRoom.display_name;
+      chatRoomCard.querySelector('.chat-room-card').setAttribute('data-room-id', chatRoom.chat_room_id);
+      chatRoomsContainer.appendChild(chatRoomCard);
+    }
+
+    joinRoom(r.chats[0].chat_room_id, r.chats[0].display_name);
+  }).catch(e => {
+    console.log(e);
   });
-  const loginJ = await loginRes.json();
-  if (!loginRes.ok) throw new Error(loginJ.error || 'login failed');
-  return loginJ.playlist_id || playlistId;
 }
 
 function fillNavbar(user) {
@@ -243,7 +251,7 @@ async function loadAndRenderPlaylists() {
     for (let playlist of playlistsData.items) {
       // show playlists on dashboard
       const playlistCard = playlistDiv.content.cloneNode(true);
-      playlistCard.querySelector('.card-image').src = playlist.images[0]?.url || '';
+      playlistCard.querySelector('.card-image').src = playlist.images ? playlist.images[0]?.url : '';
       playlistCard.querySelector('.card-title').textContent = playlist.name || 'Untitled';
       playlistCard.querySelector('.card').setAttribute('data-playlist-id', playlist.id);
       container.appendChild(playlistCard);
@@ -264,6 +272,14 @@ document.getElementById('spotify-playlist-column').addEventListener('click', (e)
   const pid = card.getAttribute('data-playlist-id');
   // maybe add a "selected" class so that it looks different
   console.log(pid);
+}, false);
+
+// when you click on a chat room card
+chatRoomsContainer.addEventListener('click', (e) => {
+  const chatCard = e.target.closest('.chat-room-card');
+  if (!chatCard) return;
+
+  joinRoom(chatCard.getAttribute('data-room-id'), chatCard.textContent);
 }, false);
 
 (async function init() {

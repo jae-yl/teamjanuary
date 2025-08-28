@@ -86,7 +86,7 @@ body {
 
 #spotify-playlist-column,
 .main-chat-window,
-.chat-rooms {
+#chat-rooms-container {
   background: var(--spotify-dark);
   border: 1px solid var(--border);
   border-radius: 16px;

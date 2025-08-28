@@ -5,7 +5,6 @@ import env from '../env.json' with { type: 'json' };
 import http from 'http';
 import cors from 'cors';
 import { Server } from 'socket.io';
-import * as argon2 from 'argon2';
 
 import { Pool } from 'pg';
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
@@ -107,6 +106,7 @@ app.post("/login", async (req, res) => {
     const { id } = req.body;
     if (!id) throw new Error("id not found");
 
+    // fetch user data
     const accountData = await pool
       .query("SELECT * FROM ud WHERE id = $1;", [id])
       .then(r => r.rows[0]);
@@ -121,9 +121,19 @@ app.post("/login", async (req, res) => {
       email: accountData.email,
     };
 
+    // fetch user chats
+    const userChats = await pool
+    .query("select cr.chat_room_id, cr.room_member_id, ud.display_name from (select * from chat_rooms where room_member_id = $1) as td\
+      join chat_rooms as cr ON cr.chat_room_id = td.chat_room_id\
+      join ud ON ud.id = cr.room_member_id\
+      where cr.room_member_id != $2;", [accountData.id, accountData.id])
+    .then(r => r.rows);
+
+    req.session.chats = userChats;
+
     req.session.save(err => {
       if (err) return res.status(500).json({ error: "Could not save session" });
-      return res.status(200).json({});
+      return res.status(200).json({ chats: userChats });
     });
   } catch (e) {
     return res.status(400).json({ error: e.message, where: 'post' });
@@ -171,7 +181,7 @@ io.on("connection", (socket) => {
 
   // JOIN: load last 50 messages (oldest → newest) for this room
   socket.on("join_room", async (room) => {
-    if (!room) return;
+    if (room === null) return;
     socket.join(room);
     console.log(`Socket ${socket.id} joined room ${room}`);
 
