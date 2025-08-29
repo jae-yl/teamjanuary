@@ -121,7 +121,7 @@ app.post("/login", async (req, res) => {
       email: accountData.email,
     };
 
-    // fetch user chats
+    // fetch user chat rooms
     const userChats = await pool
     .query("select cr.chat_room_id, cr.room_member_id, ud.display_name from (select * from chat_rooms where room_member_id = $1) as td\
       join chat_rooms as cr ON cr.chat_room_id = td.chat_room_id\
@@ -205,7 +205,7 @@ io.on("connection", (socket) => {
   // SEND: persist message and broadcast to everyone in the room EXCEPT the sender
 socket.on("send_message", async (data = {}) => {
   const { room, user, msg } = data;
-  if (!room || !user || !msg) return;
+  if (room === null || !user || !msg) return;
 
   const username  = typeof user === "string" ? user : (user?.username || String(user?.id) || "user");
   const sender_id = typeof user === "string" ? null : (user?.id != null ? String(user.id) : null);

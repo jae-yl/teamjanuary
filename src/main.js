@@ -41,6 +41,7 @@ function joinRoom(room, card = null) {
   if (room === null) return;
   if (currentRoom) socket.emit('leave_room', currentRoom);
   currentRoom = room;
+  console.log(currentRoom);
   socket.emit('join_room', currentRoom);
   clearMessages();
   if (title) title.textContent = `Chat ${card}`;
@@ -50,6 +51,7 @@ function sendMessage() {
   const user = getChatUsername();
   const msg = (input?.value || '').trim();
   if (!user || !msg || currentRoom === null) return;
+  console.log('sending message');
 
   addMessage({ text: msg, who: 'me', user });
   socket.emit('send_message', { room: currentRoom, user, msg });
