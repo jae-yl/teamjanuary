@@ -47,11 +47,28 @@ function joinRoom(room, card = null) {
   if (title) title.textContent = `Chat ${card}`;
 }
 
+function appendMessage(msg, isMe = false) {
+  const div = document.createElement("div");
+  div.classList.add("chat-bubble", isMe ? "sent" : "received");
+  div.textContent = msg;
+  messages.appendChild(div);
+  messages.scrollTop = messages.scrollHeight;
+}
+
+socket.on("load_messages", (rows = []) => {
+  clearMessages();
+  rows.forEach(r => {
+    const name = r.username ?? r.user ?? "user";
+    const text = r.message  ?? r.msg  ?? "";
+    const isMe = name === getChatUsername();
+    appendMessage(`${name}: ${text}`, isMe);
+  });
+});
+
 function sendMessage() {
   const user = getChatUsername();
   const msg = (input?.value || '').trim();
   if (!user || !msg || currentRoom === null) return;
-  console.log('sending message');
 
   addMessage({ text: msg, who: 'me', user });
   socket.emit('send_message', { room: currentRoom, user, msg });

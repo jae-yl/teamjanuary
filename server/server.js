@@ -9,30 +9,10 @@ import { Server } from 'socket.io';
 import { Pool } from 'pg';
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
+// connect to db
 pool.query('SELECT current_database() AS db, current_user AS usr')
-  .then(r => console.log('PG connected →', r.rows[0]))
-  .catch(e => console.error('PG connect check failed:', e));
-
-// ──────────────── CHATS TABLE BOOTSTRAP (Option A schema) ────────────────
-async function ensureChatsTable() {
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS public.chats (
-      id          SERIAL PRIMARY KEY,
-      room        VARCHAR(50) NOT NULL,
-      username    VARCHAR(50) NOT NULL,
-      message     TEXT        NOT NULL,
-      "timestamp" TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      sender_id   VARCHAR
-    );
-    CREATE INDEX IF NOT EXISTS idx_chats_room_ts   ON public.chats (room, "timestamp");
-    CREATE INDEX IF NOT EXISTS idx_chats_sender_id ON public.chats (sender_id);
-  `);
-}
-ensureChatsTable().catch(err => {
-  console.error("Failed to ensure chats table:", err);
-  process.exit(1);
-});
-
+.then(r => console.log('PG connected →', r.rows[0]))
+.catch(e => console.error('PG connect check failed:', e));
 
 
 import connectPgSimple from 'connect-pg-simple';
@@ -122,18 +102,18 @@ app.post("/login", async (req, res) => {
     };
 
     // fetch user chat rooms
-    const userChats = await pool
+    const userChatRooms = await pool
     .query("select cr.chat_room_id, cr.room_member_id, ud.display_name from (select * from chat_rooms where room_member_id = $1) as td\
       join chat_rooms as cr ON cr.chat_room_id = td.chat_room_id\
       join ud ON ud.id = cr.room_member_id\
       where cr.room_member_id != $2;", [accountData.id, accountData.id])
     .then(r => r.rows);
 
-    req.session.chats = userChats;
+    req.session.chatRooms = userChatRooms;
 
     req.session.save(err => {
       if (err) return res.status(500).json({ error: "Could not save session" });
-      return res.status(200).json({ chats: userChats });
+      return res.status(200).json({ chats: userChatRooms });
     });
   } catch (e) {
     return res.status(400).json({ error: e.message, where: 'post' });
@@ -188,13 +168,14 @@ io.on("connection", (socket) => {
     try {
       const { rows } = await pool.query(
         `SELECT username, message, sender_id, "timestamp"
-         FROM public.chats
+         FROM chats
          WHERE room = $1
          ORDER BY "timestamp" ASC
          LIMIT 50`,
         [room]
       );
       // only to the joining user
+      console.log('rows:', rows);
       socket.emit("load_messages", rows);
     } catch (err) {
       console.error("Error fetching chat history:", err);
@@ -221,16 +202,15 @@ socket.on("send_message", async (data = {}) => {
     console.log("INSERT rowCount →", result.rowCount);
 
     // send to everyone else (prevents double bubble for sender)
-// send to everyone else (prevents double bubble for sender)
-socket.to(room).emit("receive_message", {
-  room,
-  username,                 // new shape
-  user: username,           // legacy shape
-  message: msg,             // new shape
-  msg,                      // legacy shape
-  sender_id,
-  timestamp: new Date().toISOString(),
-});
+    socket.to(room).emit("receive_message", {
+      room,
+      username,                 // new shape
+      user: username,           // legacy shape
+      message: msg,             // new shape
+      msg,                      // legacy shape
+      sender_id,
+      timestamp: new Date().toISOString(),
+    });
 
   } catch (err) {
     console.error("INSERT error →", err);
