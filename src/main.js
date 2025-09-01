@@ -33,18 +33,54 @@ function addMessage({ text, who = 'them', user, timestamp = Date.now() }) {
 }
 function clearMessages() { if (messages) messages.innerHTML = ''; }
 
+function renderHistory(list = []) {
+  if (!Array.isArray(list) || !messages) return;
+  clearMessages(); // wipe old messages first
+
+  list
+    .sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0)) // optional: oldest → newest
+    .forEach(m =>
+      addMessage({
+        text: m.msg,
+        who: m.user === getChatUsername() ? 'me' : 'them',
+        user: m.user,
+        timestamp: m.timestamp || Date.now()
+      })
+    );
+}
+
 function getChatUsername() {
   return localStorage.getItem('vm_display_name') || '';
 }
 
 let currentRoom = null;
-function joinRoom(room, card = null) {
-  if (room === null) return;
+function joinRoom(roomId, displayName = '') {
+  if (!roomId) return;
+
   if (currentRoom) socket.emit('leave_room', currentRoom);
-  currentRoom = room;
+  currentRoom = roomId;
   socket.emit('join_room', currentRoom);
+
   clearMessages();
-  if (title) title.textContent = `Chat ${card}`;
+  if (title) title.textContent = `Chat ${displayName || roomId}`;
+
+  // Ask server for history
+  socket.emit('history:request', { room: roomId });
+
+  socket.once('history:response', ({ room, messages: history = [] }) => {
+    if (room !== currentRoom) return;
+
+    history
+      .sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0))
+      .forEach(m =>
+        addMessage({
+          text: m.msg,
+          who: m.user === getChatUsername() ? 'me' : 'them',
+          user: m.user,
+          timestamp: m.timestamp || Date.now()
+        })
+      );
+  });
 }
 
 function sendMessage() {
