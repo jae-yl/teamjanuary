@@ -12,7 +12,6 @@ const sendBtn = document.querySelector('.main-chat-window .chat__send');
 const title = document.querySelector('.main-chat-window .chat__title');
 const chatRoomsContainer = document.getElementById('chat-rooms');
 
-
 function timeNow(ts = Date.now()) {
   return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
@@ -58,35 +57,36 @@ function joinRoom(roomId, displayName = '') {
   if (!roomId) return;
 
   if (currentRoom) socket.emit('leave_room', currentRoom);
-  currentRoom = roomId;
+  currentRoom = room;
+  console.log(currentRoom);
   socket.emit('join_room', currentRoom);
 
   clearMessages();
-  if (title) title.textContent = `Chat ${displayName || roomId}`;
-
-  // Ask server for history
-  socket.emit('history:request', { room: roomId });
-
-  socket.once('history:response', ({ room, messages: history = [] }) => {
-    if (room !== currentRoom) return;
-
-    history
-      .sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0))
-      .forEach(m =>
-        addMessage({
-          text: m.msg,
-          who: m.user === getChatUsername() ? 'me' : 'them',
-          user: m.user,
-          timestamp: m.timestamp || Date.now()
-        })
-      );
-  });
+  if (title) title.textContent = `Chat ${card}`;
 }
+
+function appendMessage(msg, isMe = false) {
+  const div = document.createElement("div");
+  div.classList.add("chat-bubble", isMe ? "sent" : "received");
+  div.textContent = msg;
+  messages.appendChild(div);
+  messages.scrollTop = messages.scrollHeight;
+}
+
+socket.on("load_messages", (rows = []) => {
+  clearMessages();
+  rows.forEach(r => {
+    const name = r.username ?? r.user ?? "user";
+    const text = r.message  ?? r.msg  ?? "";
+    const isMe = name === getChatUsername();
+    appendMessage(`${name}: ${text}`, isMe);
+  });
+});
 
 function sendMessage() {
   const user = getChatUsername();
   const msg = (input?.value || '').trim();
-  if (!user || !msg || !currentRoom) return;
+  if (!user || !msg || currentRoom === null) return;
 
   addMessage({ text: msg, who: 'me', user });
   socket.emit('send_message', { room: currentRoom, user, msg });
@@ -227,6 +227,7 @@ async function getAccountOrCreate(user) {
         display_name: user.display_name,
         email: user.email,
         id: user.id,
+        user_pfp: user.images[0]?.url
       })
     });
     const accJ = await accRes.json().catch(() => ({}));
@@ -238,7 +239,7 @@ async function getAccountOrCreate(user) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'include',
-    body: JSON.stringify({ id: user.id })
+    body: JSON.stringify({ id: user.id, user_pfp: user.images[0]?.url })
   }).then(r => {
     if (!r.ok) throw new Error('Login failed');
     return r.json();
@@ -246,9 +247,9 @@ async function getAccountOrCreate(user) {
     let chatRoomsDiv = document.getElementById('chat-room-template');
 
     for (let chatRoom of r.chats || []) {
-      console.log(chatRoom);
       const chatRoomCard = chatRoomsDiv.content.cloneNode(true);
-      chatRoomCard.querySelector('.chat-room-card').textContent = chatRoom.display_name;
+      chatRoomCard.querySelector('.chat-room-name').textContent = chatRoom.display_name;
+      chatRoomCard.querySelector('.profile-pic').src = chatRoom.pfp_link == 'n' ? '/defaultpfp.png' : chatRoom.pfp_link;
       chatRoomCard.querySelector('.chat-room-card').setAttribute('data-room-id', chatRoom.chat_room_id);
       chatRoomsContainer.appendChild(chatRoomCard);
     }
@@ -261,7 +262,7 @@ async function getAccountOrCreate(user) {
 
 function fillNavbar(user) {
   const display = (user.display_name || user.id || '').trim();
-  const avatar = (user.images && user.images.length > 0) ? user.images[0].url : '';
+  const avatar = (user.images && user.images.length > 0) ? user.images[0].url : '/defaultpfp.png';
 
   localStorage.setItem('vm_display_name', display);
   if (avatar) localStorage.setItem('vm_avatar_url', avatar);

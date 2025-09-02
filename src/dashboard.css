@@ -39,7 +39,7 @@ body {
   color: var(--spotify-green-light)
 }
 
-#profile-pic {
+.profile-pic {
   width: 32px;
   height: 32px;
   border-radius: 50%;
@@ -80,7 +80,7 @@ body {
   grid-template-columns: 1fr 1.6fr 1fr;
   gap: 16px;
   padding: 16px;
-  max-width: 1400px;
+  max-height: calc(100vh - 95px);
   margin: 0 auto;
 }
 
@@ -93,6 +93,12 @@ body {
   padding: 14px;
   min-height: 70vh;
   backdrop-filter: blur(6px);
+  max-height: calc(100vh - 125px);
+}
+
+#spotify-playlist {
+  max-height: calc(100% - 20px);
+  overflow-y: auto;
 }
 
 .main-chat-window {
