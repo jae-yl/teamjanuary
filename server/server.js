@@ -65,14 +65,14 @@ app.post("/verifyaccount", async (req, res) => {
 
 app.post("/createaccount", async (req, res) => {
   try {
-    const { display_name, email, id } = req.body;
+    const { display_name, email, id, user_pfp } = req.body;
     if (!display_name || !email || !id ) {
       throw new Error("display_name, or email not found");
     }
 
     await pool.query(
-      "INSERT INTO ud (id, display_name, email) VALUES ($1, $2, $3);",
-      [id, display_name, email]
+      "INSERT INTO ud (id, display_name, email) VALUES ($1, $2, $3, $4);",
+      [id, display_name, email, user_pfp || null]
     );
 
     return res.status(200).json({ status: "ok" });
@@ -83,7 +83,7 @@ app.post("/createaccount", async (req, res) => {
 
 app.post("/login", async (req, res) => {
   try {
-    const { id } = req.body;
+    const { id, user_pfp } = req.body;
     if (!id) throw new Error("id not found");
 
     // fetch user data
@@ -95,10 +95,17 @@ app.post("/login", async (req, res) => {
       return res.status(404).json({ error: "Account not found" });
     }
 
+    console.log('user_pfp:', user_pfp, " accountData.user_php:", accountData.user_pfp);
+    // if our stored pfp is different from the one recieved, update it
+    if (user_pfp != accountData.user_pfp) {
+      await pool.query("UPDATE ud SET user_php = $1 WHERE id = $2;", [user_pfp, id]);
+    }
+
     req.session.user = {
       id: accountData.id,
       display_name: accountData.display_name,
       email: accountData.email,
+      user_pfp: user_pfp ?? null
     };
 
     // fetch user chat rooms
@@ -174,8 +181,7 @@ io.on("connection", (socket) => {
          LIMIT 50`,
         [room]
       );
-      // only to the joining user
-      console.log('rows:', rows);
+
       socket.emit("load_messages", rows);
     } catch (err) {
       console.error("Error fetching chat history:", err);

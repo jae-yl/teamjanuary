@@ -209,6 +209,7 @@ async function getAccountOrCreate(user) {
         display_name: user.display_name,
         email: user.email,
         id: user.id,
+        user_pfp: user.images[0]?.url
       })
     });
     const accJ = await accRes.json().catch(() => ({}));
@@ -220,7 +221,7 @@ async function getAccountOrCreate(user) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'include',
-    body: JSON.stringify({ id: user.id })
+    body: JSON.stringify({ id: user.id, user_pfp: user.images[0]?.url })
   }).then(r => {
     if (!r.ok) throw new Error('Login failed');
     return r.json();
@@ -242,7 +243,7 @@ async function getAccountOrCreate(user) {
 
 function fillNavbar(user) {
   const display = (user.display_name || user.id || '').trim();
-  const avatar = (user.images && user.images.length > 0) ? user.images[0].url : '';
+  const avatar = (user.images && user.images.length > 0) ? user.images[0].url : '/defaultpfp.png';
 
   localStorage.setItem('vm_display_name', display);
   if (avatar) localStorage.setItem('vm_avatar_url', avatar);
