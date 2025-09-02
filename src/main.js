@@ -230,7 +230,8 @@ async function getAccountOrCreate(user) {
 
     for (let chatRoom of r.chats || []) {
       const chatRoomCard = chatRoomsDiv.content.cloneNode(true);
-      chatRoomCard.querySelector('.chat-room-card').textContent = chatRoom.display_name;
+      chatRoomCard.querySelector('.chat-room-name').textContent = chatRoom.display_name;
+      chatRoomCard.querySelector('.profile-pic').src = chatRoom.pfp_link == 'n' ? '/defaultpfp.png' : chatRoom.pfp_link;
       chatRoomCard.querySelector('.chat-room-card').setAttribute('data-room-id', chatRoom.chat_room_id);
       chatRoomsContainer.appendChild(chatRoomCard);
     }

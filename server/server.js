@@ -72,7 +72,7 @@ app.post("/createaccount", async (req, res) => {
 
     await pool.query(
       "INSERT INTO ud (id, display_name, email) VALUES ($1, $2, $3, $4);",
-      [id, display_name, email, user_pfp || null]
+      [id, display_name, email, user_pfp ?? 'n']
     );
 
     return res.status(200).json({ status: "ok" });
@@ -95,10 +95,9 @@ app.post("/login", async (req, res) => {
       return res.status(404).json({ error: "Account not found" });
     }
 
-    console.log('user_pfp:', user_pfp, " accountData.user_php:", accountData.user_pfp);
     // if our stored pfp is different from the one recieved, update it
     if (user_pfp != accountData.user_pfp) {
-      await pool.query("UPDATE ud SET user_php = $1 WHERE id = $2;", [user_pfp, id]);
+      await pool.query("UPDATE ud SET pfp_link = $1 WHERE id = $2;", [user_pfp, id]);
     }
 
     req.session.user = {
@@ -110,7 +109,7 @@ app.post("/login", async (req, res) => {
 
     // fetch user chat rooms
     const userChatRooms = await pool
-    .query("select cr.chat_room_id, cr.room_member_id, ud.display_name from (select * from chat_rooms where room_member_id = $1) as td\
+    .query("select cr.chat_room_id, cr.room_member_id, ud.display_name, ud.pfp_link from (select * from chat_rooms where room_member_id = $1) as td\
       join chat_rooms as cr ON cr.chat_room_id = td.chat_room_id\
       join ud ON ud.id = cr.room_member_id\
       where cr.room_member_id != $2;", [accountData.id, accountData.id])
