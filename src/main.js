@@ -206,6 +206,7 @@ function fillNavbar(user) {
   if (profileName) profileName.textContent = `Signed in as ${display}`;
 }
 
+var userChatsWith = [];
 function addChatRoomCards(chats) {
   const tpl = document.getElementById('chat-room-template');
   for (let chatRoom of chats || []) {
@@ -214,6 +215,8 @@ function addChatRoomCards(chats) {
     frag.querySelector('.profile-pic').src = chatRoom.pfp_link === 'n' ? '/defaultpfp.png' : chatRoom.pfp_link;
     frag.querySelector('.chat-room-card').setAttribute('data-room-id', chatRoom.chat_room_id);
     chatRoomsContainer.appendChild(frag);
+
+    userChatsWith.push(chatRoom.room_member_id);
   }
 }
 
@@ -301,16 +304,27 @@ document.getElementById('spotify-playlist-column')?.addEventListener('click', (e
   card.classList.add('selected');
 }, false);
 
-document.getElementById('find-match-button')?.addEventListener('click', async () => {
+const findMatchButton = document.getElementById('find-match-button');
+if (!findMatchButton) console.log('cannot find findmatch button');
+
+findMatchButton.addEventListener('click', async () => {
   if (!pid) {
     alert('Please select a playlist first!');
   } else {
-    const rawArtists = await fetchJson(`https://api.spotify.com/v1/playlists/${pid}/tracks?fields=items%28track%28artists%28name%29%29%29limit=50`, {
-      method: 'GET',
-      headers: { Authorization: 'Bearer ' + currentToken.access_token },
-    });
-    const artists = new Set(rawArtists.items.map(item => item.track.artists.map(a => a.name)).flat());
-    socket.emit('search_for_room', [...artists]);
+    if (findMatchButton.getAttribute('data-searching') == "true") {
+      findMatchButton.textContent = "Match my Vibe";
+      findMatchButton.setAttribute('data-searching', false);
+      socket.emit('stop_searching');
+    } else {
+      findMatchButton.textContent = "Matching...";
+      findMatchButton.setAttribute('data-searching', true);
+      const rawArtists = await fetchJson(`https://api.spotify.com/v1/playlists/${pid}/tracks?fields=items%28track%28artists%28name%29%29%29limit=50`, {
+        method: 'GET',
+        headers: { Authorization: 'Bearer ' + currentToken.access_token },
+      });
+      const artists = new Set(rawArtists.items.map(item => item.track.artists.map(a => a.name)).flat());
+      socket.emit('search_for_room', [...artists]);
+    }
   }
 });
 
@@ -419,7 +433,6 @@ addSongBtn?.addEventListener('click', addSongToPlaylist);
 copyCollabLinkBtn?.addEventListener('click', copyCollaborativeLink);
 
 // ===== Init =====
-var userChatsWith = [];
 (async function init() {
   if (!currentToken.access_token) {
     window.location.replace('http://127.0.0.1:5173');
@@ -463,6 +476,10 @@ var userChatsWith = [];
 
     // vibe-matching → new room
     socket.on('matched_room', (data) => {
+      findMatchButton.textContent = "Match my Vibe";
+      findMatchButton.setAttribute('data-searching', false);
+      socket.emit('stop_searching');
+      
       if (getUserId() == data.user1) {
         addChatRoomCards([{ display_name: data.user2display, pfp_link: data.user2pfp, chat_room_id: data.room_id }]);
         joinRoom(data.room_id, data.user2display);
@@ -512,5 +529,3 @@ var userChatsWith = [];
     console.error(e);
   }
 })();
-
-export { fetchJson, currentToken }

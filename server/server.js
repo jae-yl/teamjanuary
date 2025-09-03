@@ -202,6 +202,8 @@ io.on("connection", (socket) => {
         if (!userExistingChats.get(userId)?.has(id)) {
           console.log(userId, "matched with", id);
           userExistingChats.get(userId).add(id);
+          userExistingChats.get(id).add(userId);
+          
           userPreferenceMap.delete(id);
 
           try {
@@ -238,6 +240,11 @@ io.on("connection", (socket) => {
 
     console.log('added to search list', userId);
     userPreferenceMap.set(userId, new Set(artists));
+  });
+
+  socket.on("stop_searching", () => {
+    console.log('removed from search list', userId);
+    userPreferenceMap.delete(userId);
   });
 
   // join room
