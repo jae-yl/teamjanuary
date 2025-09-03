@@ -138,13 +138,10 @@ app.post("/logout", (req, res) => {
 });
 
 app.post("/findmatch", (req, res) => {
-  const { titles, artists, albums } = req.body;
-
-  console.log('titles:', titles);
-  console.log('artists:', artists);
-  console.log('albums:', albums);
-
   try {
+    const { artists } = req.body;
+    if (!artists) throw new Error("artists not found");
+
     console.log("Session data:", req.session);
     res.status(200).json({ status: "ok" });
   } catch (e) {
@@ -162,69 +159,136 @@ const io = new Server(server, {
   }
 });
 
+async function joinRoom(socket, userId, room) {
+  if (room === null) return;
+
+  socket.join(room);
+  console.log(`Socket ${userId} joined room ${room}`);
+
+  try {
+    const { rows } = await pool.query(
+      `SELECT username, message, sender_id, "timestamp"
+        FROM chats
+        WHERE room = $1
+        ORDER BY "timestamp" ASC
+        LIMIT 50`,
+      [room]
+    );
+
+    socket.emit("load_messages", rows);
+  } catch (err) {
+    console.error("Error fetching chat history:", err);
+    socket.emit("room_history_error", "Could not load chat history");
+  }
+}
+
+var userSocketMap = new Map();
+var userPFPMap = new Map();
+var userDisplayMap = new Map();
+var userPreferenceMap = new Map();
+var userExistingChats = new Map(); // holds userid: [ user ids already connected ]
 io.on("connection", (socket) => {
-  console.log("User connected:", socket.id);
+  const { userId, existingChats, userPfp, userDisplay } = socket.handshake.query;
+  console.log("User connected:", userId);
+  userSocketMap.set(userId, socket);
+  userPFPMap.set(userId, userPfp);
+  userDisplayMap.set(userId, userDisplay);
+  userExistingChats.set(userId, new Set(JSON.parse(existingChats)));
+
+  socket.on("search_for_room", async (artists) => {
+    userPreferenceMap.delete(userId); // just for edge case they are already somehow searching
+
+    // first we check if their preferences match someone searching
+    for (const [id, prefs] of userPreferenceMap) {
+      // contains a match
+      if (artists.some(item => prefs.has(item))) {
+        // chat room does not already exist between the 2 people
+        if (!userExistingChats.get(userId).has(id)) {
+          console.log(userId, "matched with", id);
+          userExistingChats.get(userId).add(id);
+          // remove from search if found
+          userPreferenceMap.delete(id);
+
+          // create them a room and have both of them join
+          try {
+            const newRoomId = await pool.query('SELECT COALESCE(MAX(chat_room_id), 0) + 1 as newid FROM chat_rooms;').then(r => { return r.rows[0]['newid'] });
+            await pool.query('INSERT INTO chat_rooms (chat_room_id, room_member_id) VALUES ($1, $2), ($3, $4)',
+              [newRoomId, id, newRoomId, userId]
+            );
+
+            console.log('trying to join room');
+
+            joinRoom(userSocketMap.get(userId), userId, newRoomId);
+            joinRoom(userSocketMap.get(id), id, newRoomId);
+
+            io.to(newRoomId).emit('matched_room', { 
+              room_id: newRoomId,
+              user1: userId,
+              user2: id,
+              user1pfp: userPFPMap.get(userId),
+              user2pfp: userPFPMap.get(id),
+              user1display: userDisplayMap.get(userId),
+              user2display: userDisplayMap.get(id)
+            });
+          } catch (e) {
+            console.log("error trying to create new room");
+          }
+
+          return;
+        } else {
+          console.log('chat between', userId, "and", id, "already exists");
+        }
+      }
+    }
+
+    console.log('added to search list', userId);
+    userPreferenceMap.set(userId, new Set(artists));
+  });
 
   // JOIN: load last 50 messages (oldest → newest) for this room
   socket.on("join_room", async (room) => {
-    if (room === null) return;
-    socket.join(room);
-    console.log(`Socket ${socket.id} joined room ${room}`);
-
-    try {
-      const { rows } = await pool.query(
-        `SELECT username, message, sender_id, "timestamp"
-         FROM chats
-         WHERE room = $1
-         ORDER BY "timestamp" ASC
-         LIMIT 50`,
-        [room]
-      );
-
-      socket.emit("load_messages", rows);
-    } catch (err) {
-      console.error("Error fetching chat history:", err);
-      socket.emit("room_history_error", "Could not load chat history");
-    }
+    await joinRoom(socket, userId, room);
   });
 
   // SEND: persist message and broadcast to everyone in the room EXCEPT the sender
-socket.on("send_message", async (data = {}) => {
-  const { room, user, msg } = data;
-  if (room === null || !user || !msg) return;
+  socket.on("send_message", async (data = {}) => {
+    const { room, user, msg } = data;
+    if (room === null || !user || !msg) return;
 
-  const username  = typeof user === "string" ? user : (user?.username || String(user?.id) || "user");
-  const sender_id = typeof user === "string" ? null : (user?.id != null ? String(user.id) : null);
+    const username  = typeof user === "string" ? user : (user?.username || String(user?.id) || "user");
+    const sender_id = typeof user === "string" ? null : (user?.id != null ? String(user.id) : null);
 
-  console.log("SEND_MESSAGE received →", { room, username, msg });
+    console.log("SEND_MESSAGE received →", { room, username, msg });
 
-  try {
-    const result = await pool.query(
-      `INSERT INTO public.chats (room, username, message, sender_id)
-       VALUES ($1, $2, $3, $4)`,
-      [room, username, msg, sender_id]
-    );
-    console.log("INSERT rowCount →", result.rowCount);
+    try {
+      const result = await pool.query(
+        `INSERT INTO public.chats (room, username, message, sender_id)
+        VALUES ($1, $2, $3, $4)`,
+        [room, username, msg, sender_id]
+      );
+      console.log("INSERT rowCount →", result.rowCount);
 
-    // send to everyone else (prevents double bubble for sender)
-    socket.to(room).emit("receive_message", {
-      room,
-      username,                 // new shape
-      user: username,           // legacy shape
-      message: msg,             // new shape
-      msg,                      // legacy shape
-      sender_id,
-      timestamp: new Date().toISOString(),
-    });
+      // send to everyone else (prevents double bubble for sender)
+      socket.to(room).emit("receive_message", {
+        room,
+        username,                 // new shape
+        user: username,           // legacy shape
+        message: msg,             // new shape
+        msg,                      // legacy shape
+        sender_id,
+        timestamp: new Date().toISOString(),
+      });
 
-  } catch (err) {
-    console.error("INSERT error →", err);
-    socket.emit("send_error", "Could not send your message");
-  }
-});
+    } catch (err) {
+      console.error("INSERT error →", err);
+      socket.emit("send_error", "Could not send your message");
+    }
+  });
 
   socket.on("disconnect", () => {
-    console.log("User disconnected:", socket.id);
+    console.log("User disconnected:", userId);
+    userPreferenceMap.delete(userId);
+    userExistingChats.delete(userId);
   });
 });
 
