@@ -32,7 +32,6 @@
             <h2 class="spotify-playlist-header">Spotify Playlists</h2>
 
             <button id="find-match-button">Match my Vibe</button>
-            <span> first 50 songs </span>
 
             <div id="spotify-playlist" class="playlist-container">
                 <template id="playlist-template">
@@ -44,7 +43,7 @@
                             </div>
                             <div class="col">
                                 <div class="card-body">
-                                    <h5 class="card-title text-black"></h5>
+                                    <h5 class="card-title"></h5>
                                 </div>
                             </div>
                         </div>
@@ -96,9 +95,6 @@
         <div id="chat-rooms-container">
             <h2 class="chat-room-header">Chat Rooms</h2>
             <div id="chat-rooms">
-                <div class="chat-room-card" data-room-id="chat-room-1">chat room 1</div>
-                <div class="chat-room-card" data-room-id="chat-room-2">chat room 2</div>
-
                 <template id="chat-room-template">
                     <div class="chat-room-card" data-room-id="">
                         <img class="profile-pic" src="" alt="User's Profile Picture" />
@@ -111,7 +107,6 @@
     </div>
 
     <script type="module" src="main.js"></script>
-    <script type="module" src="playlistdata.js"></script>
 </body>
 
 </html>

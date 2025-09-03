@@ -9,10 +9,6 @@ import { Server } from 'socket.io';
 import { Pool } from 'pg';
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
-pool.query('SELECT current_database() AS db, current_user AS usr')
-  .then(r => console.log('PG connected →', r.rows[0]))
-  .catch(e => console.error('PG connect check failed:', e));
-
 import connectPgSimple from 'connect-pg-simple';
 const pgSession = connectPgSimple(session);
 
@@ -206,6 +202,8 @@ io.on("connection", (socket) => {
         if (!userExistingChats.get(userId)?.has(id)) {
           console.log(userId, "matched with", id);
           userExistingChats.get(userId).add(id);
+          userExistingChats.get(id).add(userId);
+          
           userPreferenceMap.delete(id);
 
           try {
@@ -244,6 +242,11 @@ io.on("connection", (socket) => {
     userPreferenceMap.set(userId, new Set(artists));
   });
 
+  socket.on("stop_searching", () => {
+    console.log('removed from search list', userId);
+    userPreferenceMap.delete(userId);
+  });
+
   // join room
   socket.on("join_room", async (room) => {
     await joinRoom(socket, userId, room);
@@ -259,7 +262,7 @@ io.on("connection", (socket) => {
 
     try {
       await pool.query(
-        `INSERT INTO public.chats (room, username, message, sender_id)
+        `INSERT INTO chats (room, username, message, sender_id)
          VALUES ($1, $2, $3, $4)`,
         [room, username, msg, sender_id]
       );
