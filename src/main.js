@@ -417,10 +417,6 @@ async function addSongToPlaylist() {
     // echo to room
     socket.emit('add_song', { room: currentRoom, songName: trackName, user: getChatUsername() });
 
-    // update my UI
-    const li = document.createElement('li');
-    li.textContent = trackName;
-    collaborativeSongList.appendChild(li);
     collabFeedback.textContent = `Added: ${trackName}`;
     songUrlInput.value = '';
   } catch (e) {
