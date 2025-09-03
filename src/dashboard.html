@@ -27,75 +27,91 @@
     </nav>
 
     <div class="dashboard-container">
+        <!-- LEFT COLUMN: Spotify playlists + Collaborative playlists -->
+        <div id="spotify-playlist-column">
+            <h2 class="spotify-playlist-header">Spotify Playlists</h2>
 
-        <!-- Collaborative Playlist Section -->
-        <section class="collaborative-playlist-section">
-            <h2 class="collaborative-playlist-header">Collaborative Playlists</h2>
-            <div id="collaborative-playlist-container" class="playlist-container">
+            <button id="find-match-button">Match my Vibe</button>
+            <span> first 50 songs </span>
 
-                <button id="create-collab-playlist-btn" class="btn">
-                    Create Collaborative Playlist
-                </button>
-                <div id="collab-playlist-feedback"></div>
-
-                <div id="collab-playlist-status"></div>
-                <div id="collab-playlist-display"></div>
-<button id="copy-collab-link-btn" class="btn">Copy Collaborative Link</button>
-<div id="copy-link-feedback" class="feedback"></div>
-                <div class="collab-actions">
-                    <input 
-                        type="url" 
-                        id="spotify-song-url" 
-                        placeholder="Paste Spotify track URL"
-                    />
-                    <button id="add-song-btn" class="btn">Add Song</button>
-                </div>
-
-                <ul id="collaborative-song-list"></ul>
+            <div id="spotify-playlist" class="playlist-container">
+                <template id="playlist-template">
+                    <div class="card mb-3 rounded-3 playlist-card" data-playlist-id="">
+                        <div class="row g-0 align-items-center">
+                            <div class="col-auto">
+                                <img class="card-image img-fluid rounded-3" src="" alt="Playlist cover image"
+                                    style="width: 100px; height: 100px; object-fit: cover;">
+                            </div>
+                            <div class="col">
+                                <div class="card-body">
+                                    <h5 class="card-title text-black"></h5>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </template>
             </div>
-        </section>
 
-        <!-- Spotify Playlist Section -->
-        <section class="spotify-playlist-column">
-            <h2 class="spotify-playlist-header">Spotify Playlist</h2>
-            <div id="spotify-playlist" class="playlist-container"></div>
-            <div id="collab-playlist-display"></div>
-            <input 
-                type="url" 
-                name="playlistUrl" 
-                id="playlistUrl" 
-                placeholder="https://open.spotify.com/playlist/..." 
-                pattern="https://open.spotify.com/playlist/.*" 
-            />
-        </section>
+            <!-- Collaborative Playlist Section -->
+            <section class="collaborative-playlist-section" style="margin-top: 16px;">
+                <h2 class="collaborative-playlist-header">Collaborative Playlists</h2>
 
-        <!-- Main Chat Window -->
-        <section class="main-chat-window">
+                <div id="collaborative-playlist-container" class="playlist-container">
+                    <button id="create-collab-playlist-btn" class="btn">Create Collaborative Playlist</button>
+                    <div id="collab-playlist-feedback"></div>
+
+                    <div id="collab-playlist-status"></div>
+                    <div id="collab-playlist-display"></div>
+
+                    <button id="copy-collab-link-btn" class="btn">Copy Collaborative Link</button>
+                    <div id="copy-link-feedback" class="feedback"></div>
+
+                    <div class="collab-actions">
+                        <input type="url" id="spotify-song-url" placeholder="Paste Spotify track URL" />
+                        <button id="add-song-btn" class="btn">Add Song</button>
+                    </div>
+
+                    <ul id="collaborative-song-list"></ul>
+                </div>
+            </section>
+        </div>
+
+        <!-- MIDDLE COLUMN: Chat window -->
+        <div class="main-chat-window">
             <div class="chat">
                 <header class="chat__header">
                     <div>
                         <h2 class="chat__title"></h2>
                     </div>
                 </header>
-                <main class="chat__messages" aria-live="polite" aria-label="Chat messages">
-                </main>
+                <main class="chat__messages" aria-live="polite" aria-label="Chat messages"></main>
                 <footer class="chat__composer">
                     <input class="chat__input" type="text" placeholder="Type a message…" />
                     <button class="chat__send">Send</button>
                 </footer>
             </div>
-        </section>
+        </div>
 
-        <!-- Chat Rooms Section -->
-        <section class="chat-rooms">
+        <!-- RIGHT COLUMN: Chat Rooms (template-based) -->
+        <div id="chat-rooms-container">
             <h2 class="chat-room-header">Chat Rooms</h2>
-            <div class="chat-room-card">chat room 1</div>
-            <div class="chat-room-card">chat room 2</div>
-        </section>
+            <div id="chat-rooms">
+                <div class="chat-room-card" data-room-id="chat-room-1">chat room 1</div>
+                <div class="chat-room-card" data-room-id="chat-room-2">chat room 2</div>
+
+                <template id="chat-room-template">
+                    <div class="chat-room-card" data-room-id="">
+                        <img class="profile-pic" src="" alt="User's Profile Picture" />
+                        <span class="chat-room-name"></span>
+                    </div>
+                </template>
+            </div>
+        </div>
 
     </div>
 
     <script type="module" src="main.js"></script>
+    <script type="module" src="playlistdata.js"></script>
 </body>
 
 </html>
