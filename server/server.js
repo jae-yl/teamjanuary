@@ -9,11 +9,9 @@ import { Server } from 'socket.io';
 import { Pool } from 'pg';
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
-// connect to db
 pool.query('SELECT current_database() AS db, current_user AS usr')
-.then(r => console.log('PG connected →', r.rows[0]))
-.catch(e => console.error('PG connect check failed:', e));
-
+  .then(r => console.log('PG connected →', r.rows[0]))
+  .catch(e => console.error('PG connect check failed:', e));
 
 import connectPgSimple from 'connect-pg-simple';
 const pgSession = connectPgSimple(session);
@@ -22,14 +20,14 @@ const app = express();
 app.use(express.static("src"));
 app.use(express.json());
 
-// Allow cross-origin requests for front-end dev
+// CORS
 app.use(cors({
   origin: ["http://127.0.0.1:5173"],
   methods: ["GET", "POST"],
   credentials: true
 }));
 
-// Session middleware
+// Sessions
 app.use(session({
   store: new pgSession({
     pool,
@@ -54,9 +52,7 @@ app.listen(3000, '127.0.0.1', () => {
 app.post("/verifyaccount", async (req, res) => {
   try {
     const { id } = req.body;
-
-    const userExists = await pool.query("SELECT * FROM ud WHERE id = $1;", [id]);
-
+    const userExists = await pool.query("SELECT 1 FROM ud WHERE id = $1;", [id]);
     return res.status(200).json({ exists: userExists.rows.length > 0 });
   } catch (e) {
     return res.status(400).json({ error: e.message });
@@ -66,12 +62,10 @@ app.post("/verifyaccount", async (req, res) => {
 app.post("/createaccount", async (req, res) => {
   try {
     const { display_name, email, id, user_pfp } = req.body;
-    if (!display_name || !email || !id ) {
-      throw new Error("display_name, or email not found");
-    }
+    if (!display_name || !email || !id) throw new Error("display_name or email not found");
 
     await pool.query(
-      "INSERT INTO ud (id, display_name, email) VALUES ($1, $2, $3, $4);",
+      "INSERT INTO ud (id, display_name, email, pfp_link) VALUES ($1, $2, $3, $4);",
       [id, display_name, email, user_pfp ?? 'n']
     );
 
@@ -86,17 +80,13 @@ app.post("/login", async (req, res) => {
     const { id, user_pfp } = req.body;
     if (!id) throw new Error("id not found");
 
-    // fetch user data
     const accountData = await pool
       .query("SELECT * FROM ud WHERE id = $1;", [id])
       .then(r => r.rows[0]);
 
-    if (!accountData) {
-      return res.status(404).json({ error: "Account not found" });
-    }
+    if (!accountData) return res.status(404).json({ error: "Account not found" });
 
-    // if our stored pfp is different from the one recieved, update it
-    if (user_pfp != accountData.user_pfp) {
+    if (user_pfp && user_pfp !== accountData.pfp_link) {
       await pool.query("UPDATE ud SET pfp_link = $1 WHERE id = $2;", [user_pfp, id]);
     }
 
@@ -104,16 +94,20 @@ app.post("/login", async (req, res) => {
       id: accountData.id,
       display_name: accountData.display_name,
       email: accountData.email,
-      user_pfp: user_pfp ?? null
+      user_pfp: user_pfp ?? accountData.pfp_link ?? null
     };
 
-    // fetch user chat rooms
+    // user chat rooms (other member + their pfp)
     const userChatRooms = await pool
-    .query("select cr.chat_room_id, cr.room_member_id, ud.display_name, ud.pfp_link from (select * from chat_rooms where room_member_id = $1) as td\
-      join chat_rooms as cr ON cr.chat_room_id = td.chat_room_id\
-      join ud ON ud.id = cr.room_member_id\
-      where cr.room_member_id != $2;", [accountData.id, accountData.id])
-    .then(r => r.rows);
+      .query(
+        `select cr.chat_room_id, cr.room_member_id, ud.display_name, ud.pfp_link
+         from (select * from chat_rooms where room_member_id = $1) as td
+         join chat_rooms as cr ON cr.chat_room_id = td.chat_room_id
+         join ud ON ud.id = cr.room_member_id
+         where cr.room_member_id != $2;`,
+        [accountData.id, accountData.id]
+      )
+      .then(r => r.rows);
 
     req.session.chatRooms = userChatRooms;
 
@@ -141,7 +135,6 @@ app.post("/findmatch", (req, res) => {
   try {
     const { artists } = req.body;
     if (!artists) throw new Error("artists not found");
-
     console.log("Session data:", req.session);
     res.status(200).json({ status: "ok" });
   } catch (e) {
@@ -159,8 +152,9 @@ const io = new Server(server, {
   }
 });
 
+// helper: join + load history
 async function joinRoom(socket, userId, room) {
-  if (room === null) return;
+  if (room == null) return;
 
   socket.join(room);
   console.log(`Socket ${userId} joined room ${room}`);
@@ -168,13 +162,12 @@ async function joinRoom(socket, userId, room) {
   try {
     const { rows } = await pool.query(
       `SELECT username, message, sender_id, "timestamp"
-        FROM chats
-        WHERE room = $1
-        ORDER BY "timestamp" ASC
-        LIMIT 50`,
+       FROM chats
+       WHERE room = $1
+       ORDER BY "timestamp" ASC
+       LIMIT 50`,
       [room]
     );
-
     socket.emit("load_messages", rows);
   } catch (err) {
     console.error("Error fetching chat history:", err);
@@ -182,46 +175,53 @@ async function joinRoom(socket, userId, room) {
   }
 }
 
-var userSocketMap = new Map();
-var userPFPMap = new Map();
-var userDisplayMap = new Map();
-var userPreferenceMap = new Map();
-var userExistingChats = new Map(); // holds userid: [ user ids already connected ]
+// state
+const userSocketMap = new Map();
+const userPFPMap = new Map();
+const userDisplayMap = new Map();
+const userPreferenceMap = new Map();
+const userExistingChats = new Map(); // userId -> Set of userIds already connected
+
+const collaborativePlaylists = {}; // { [roomId]: { playlistId, playlistName, playlistUrl, songs: [] } }
+
 io.on("connection", (socket) => {
   const { userId, existingChats, userPfp, userDisplay } = socket.handshake.query;
   console.log("User connected:", userId);
+
   userSocketMap.set(userId, socket);
   userPFPMap.set(userId, userPfp);
   userDisplayMap.set(userId, userDisplay);
-  userExistingChats.set(userId, new Set(JSON.parse(existingChats)));
 
-  socket.on("search_for_room", async (artists) => {
-    userPreferenceMap.delete(userId); // just for edge case they are already somehow searching
+  // parse existing chats safely
+  let parsed = [];
+  try { parsed = JSON.parse(existingChats || "[]"); } catch {}
+  userExistingChats.set(userId, new Set(parsed));
 
-    // first we check if their preferences match someone searching
+  // matching by artists
+  socket.on("search_for_room", async (artists = []) => {
+    userPreferenceMap.delete(userId); // reset any prior search
+
     for (const [id, prefs] of userPreferenceMap) {
-      // contains a match
-      if (artists.some(item => prefs.has(item))) {
-        // chat room does not already exist between the 2 people
-        if (!userExistingChats.get(userId).has(id)) {
+      if (artists.some(a => prefs.has(a))) {
+        if (!userExistingChats.get(userId)?.has(id)) {
           console.log(userId, "matched with", id);
           userExistingChats.get(userId).add(id);
-          // remove from search if found
           userPreferenceMap.delete(id);
 
-          // create them a room and have both of them join
           try {
-            const newRoomId = await pool.query('SELECT COALESCE(MAX(chat_room_id), 0) + 1 as newid FROM chat_rooms;').then(r => { return r.rows[0]['newid'] });
-            await pool.query('INSERT INTO chat_rooms (chat_room_id, room_member_id) VALUES ($1, $2), ($3, $4)',
-              [newRoomId, id, newRoomId, userId]
+            const newRoomId = await pool
+              .query('SELECT COALESCE(MAX(chat_room_id), 0) + 1 as newid FROM chat_rooms;')
+              .then(r => r.rows[0]['newid']);
+
+            await pool.query(
+              'INSERT INTO chat_rooms (chat_room_id, room_member_id) VALUES ($1, $2), ($1, $3)',
+              [newRoomId, id, userId]
             );
 
-            console.log('trying to join room');
+            await joinRoom(userSocketMap.get(userId), userId, newRoomId);
+            await joinRoom(userSocketMap.get(id), id, newRoomId);
 
-            joinRoom(userSocketMap.get(userId), userId, newRoomId);
-            joinRoom(userSocketMap.get(id), id, newRoomId);
-
-            io.to(newRoomId).emit('matched_room', { 
+            io.to(newRoomId).emit('matched_room', {
               room_id: newRoomId,
               user1: userId,
               user2: id,
@@ -231,9 +231,8 @@ io.on("connection", (socket) => {
               user2display: userDisplayMap.get(id)
             });
           } catch (e) {
-            console.log("error trying to create new room");
+            console.log("error trying to create new room:", e);
           }
-
           return;
         } else {
           console.log('chat between', userId, "and", id, "already exists");
@@ -245,56 +244,100 @@ io.on("connection", (socket) => {
     userPreferenceMap.set(userId, new Set(artists));
   });
 
-  // JOIN: load last 50 messages (oldest → newest) for this room
+  // join room
   socket.on("join_room", async (room) => {
     await joinRoom(socket, userId, room);
   });
 
-  // SEND: persist message and broadcast to everyone in the room EXCEPT the sender
+  // send message
   socket.on("send_message", async (data = {}) => {
     const { room, user, msg } = data;
-    if (room === null || !user || !msg) return;
+    if (room == null || !user || !msg) return;
 
     const username  = typeof user === "string" ? user : (user?.username || String(user?.id) || "user");
     const sender_id = typeof user === "string" ? null : (user?.id != null ? String(user.id) : null);
 
-    console.log("SEND_MESSAGE received →", { room, username, msg });
-
     try {
-      const result = await pool.query(
+      await pool.query(
         `INSERT INTO public.chats (room, username, message, sender_id)
-        VALUES ($1, $2, $3, $4)`,
+         VALUES ($1, $2, $3, $4)`,
         [room, username, msg, sender_id]
       );
-      console.log("INSERT rowCount →", result.rowCount);
 
-      // send to everyone else (prevents double bubble for sender)
       socket.to(room).emit("receive_message", {
         room,
-        username,                 // new shape
-        user: username,           // legacy shape
-        message: msg,             // new shape
-        msg,                      // legacy shape
+        username,
+        user: username,
+        message: msg,
+        msg,
         sender_id,
         timestamp: new Date().toISOString(),
       });
-
     } catch (err) {
       console.error("INSERT error →", err);
       socket.emit("send_error", "Could not send your message");
     }
   });
 
+  // ── Collaborative playlist events ──
+
+  socket.on("create_collab_playlist", (data = {}) => {
+    const { room, playlistId, playlistName, playlistUrl } = data;
+    if (!room || !playlistId) return;
+
+    collaborativePlaylists[room] = {
+      playlistId,
+      playlistName,
+      playlistUrl,
+      songs: []
+    };
+
+    io.to(room).emit("collab_playlist_created", {
+      room,
+      playlistId,
+      playlistName,
+      playlistUrl
+    });
+  });
+
+  socket.on("add_song", (data = {}) => {
+    const { room, songName, user } = data;
+    if (!room || !songName) return;
+
+    if (!collaborativePlaylists[room]) {
+      collaborativePlaylists[room] = { songs: [] };
+    }
+    collaborativePlaylists[room].songs ||= [];
+    collaborativePlaylists[room].songs.push(songName);
+
+    io.to(room).emit("song_added", { room, songName, user });
+  });
+
+  socket.on("request_collab_state", (data = {}) => {
+    const { room } = data;
+    if (!room) return;
+
+    const state = collaborativePlaylists[room] || {};
+    socket.emit("collab_state", {
+      room,
+      playlistId: state.playlistId,
+      playlistName: state.playlistName,
+      playlistUrl: state.playlistUrl,
+      songs: state.songs || []
+    });
+  });
+
   socket.on("disconnect", () => {
     console.log("User disconnected:", userId);
     userPreferenceMap.delete(userId);
     userExistingChats.delete(userId);
+    userSocketMap.delete(userId);
+    userPFPMap.delete(userId);
+    userDisplayMap.delete(userId);
   });
 });
 
-// ──────────────── SERVER ────────────────
-
+// ──────────────── SERVER (sockets) ────────────────
 server.listen(3001, '127.0.0.1', () => {
   console.log("Socket server running at http://127.0.0.1:3001");
 });
-
