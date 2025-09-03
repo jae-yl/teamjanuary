@@ -30,7 +30,7 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 16px 20px;
+  padding: 16px 20px !important;
   background: var(--spotify-black);
   border-bottom: 1px solid var(--border);
 }
@@ -90,9 +90,8 @@ body {
   grid-template-columns: 1.1fr 1.4fr 1fr;
   gap: 16px;
   padding: 16px;
-  max-width: 1400px;
   margin: 0 auto;
-  height: calc(100vh - 70px);
+  height: calc(100vh - 71px);
 }
 
 #spotify-playlist-column,
@@ -143,9 +142,23 @@ body {
   min-height: 0;
 }
 
+#spotify-playlist::-webkit-scrollbar {
+  width: 10px;
+}
+
+#spotify-playlist::-webkit-scrollbar-track {
+  background: var(--spotify-gray-light);
+  border-radius: 10px;
+}
+
+#spotify-playlist::-webkit-scrollbar-thumb {
+  border-radius: 10px;
+  background: white;
+}
+
 /* Playlist cards (template) */
 .playlist-card {
-  background: #0f0f0f;
+  background-color: #2a2a2a !important;
   border: 1px solid #242424;
   border-radius: 12px;
   padding: 8px;
@@ -168,7 +181,7 @@ body {
 
 .card-title {
   margin: 0;
-  color: #111;
+  color: white !important;
 }
 
 /* title is inside a white bootstrap card body; text-black class in HTML */
@@ -268,6 +281,20 @@ body {
   padding: 14px;
   overflow-y: auto;
   min-height: 0;
+}
+
+.chat__messages::-webkit-scrollbar {
+  width: 10px;
+}
+
+.chat__messages::-webkit-scrollbar-track {
+  background: var(--spotify-gray-light);
+  border-radius: 10px;
+}
+
+.chat__messages::-webkit-scrollbar-thumb {
+  border-radius: 10px;
+  background: white;
 }
 
 .msg {
@@ -375,6 +402,21 @@ body {
   flex-direction: column;
   gap: 10px;
 }
+
+#chat-rooms::-webkit-scrollbar {
+  width: 10px;
+}
+
+#chat-rooms::-webkit-scrollbar-track {
+  background: var(--spotify-gray-light);
+  border-radius: 10px;
+}
+
+#chat-rooms::-webkit-scrollbar-thumb {
+  border-radius: 10px;
+  background: white;
+}
+
 
 #chat-rooms .chat-room-card {
   display: flex;
