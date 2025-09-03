@@ -4,7 +4,7 @@ import { io } from 'socket.io-client';
 
 // Allow configurable socket URL (fallback to 3001)
 const SOCKET_URL = window.SOCKET_URL || "http://127.0.0.1:3001";
-const socket = io(SOCKET_URL);
+var socket;
 
 const messages = document.querySelector('.main-chat-window .chat__messages');
 const input = document.querySelector('.main-chat-window .chat__input');
@@ -51,6 +51,9 @@ function renderHistory(list = []) {
 function getChatUsername() {
   return localStorage.getItem('vm_display_name') || '';
 }
+function getUserId() {
+  return localStorage.getItem('vm_id') || '';
+}
 
 let currentRoom = null;
 function joinRoom(roomId, displayName = '') {
@@ -73,16 +76,6 @@ function appendMessage(msg, isMe = false) {
   messages.scrollTop = messages.scrollHeight;
 }
 
-socket.on("load_messages", (rows = []) => {
-  clearMessages();
-  rows.forEach(r => {
-    const name = r.username ?? r.user ?? "user";
-    const text = r.message  ?? r.msg  ?? "";
-    const isMe = name === getChatUsername();
-    appendMessage(`${name}: ${text}`, isMe);
-  });
-});
-
 function sendMessage() {
   const user = getChatUsername();
   const msg = (input?.value || '').trim();
@@ -92,15 +85,11 @@ function sendMessage() {
   socket.emit('send_message', { room: currentRoom, user, msg });
   input.value = '';
 }
+
 sendBtn?.addEventListener('click', sendMessage);
+
 input?.addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
-});
-socket.off('receive_message');
-socket.on('receive_message', (data) => {
-  if (data.room && data.room !== currentRoom) return;
-  const mine = data.user === getChatUsername();
-  if (!mine) addMessage({ text: data.msg, who: 'them', user: data.user, timestamp: data.timestamp || Date.now() });
 });
 
 const API = 'http://127.0.0.1:3000';
@@ -210,6 +199,7 @@ if (authCode) {
   }
 }
 
+var userChatsWith = [];
 async function getAccountOrCreate(user) {
   const verify = await fetch(`${API}/verifyaccount`, {
     method: 'POST',
@@ -234,6 +224,7 @@ async function getAccountOrCreate(user) {
     if (!accRes.ok) throw new Error(accJ.error || 'create account failed');
   }
   
+  let firstData = {};
   // Login and store account info in session
   await fetch(`${API}/login`, {
     method: 'POST',
@@ -244,26 +235,36 @@ async function getAccountOrCreate(user) {
     if (!r.ok) throw new Error('Login failed');
     return r.json();
   }).then(r => {
-    let chatRoomsDiv = document.getElementById('chat-room-template');
+    addChatRoomCards(r.chats);
 
-    for (let chatRoom of r.chats || []) {
-      const chatRoomCard = chatRoomsDiv.content.cloneNode(true);
-      chatRoomCard.querySelector('.chat-room-name').textContent = chatRoom.display_name;
-      chatRoomCard.querySelector('.profile-pic').src = chatRoom.pfp_link == 'n' ? '/defaultpfp.png' : chatRoom.pfp_link;
-      chatRoomCard.querySelector('.chat-room-card').setAttribute('data-room-id', chatRoom.chat_room_id);
-      chatRoomsContainer.appendChild(chatRoomCard);
-    }
-
-    joinRoom(r.chats[0].chat_room_id, r.chats[0].display_name);
+    firstData['id'] = r.chats[0]?.chat_room_id;
+    firstData['display_name'] = r.chats[0]?.display_name; 
   }).catch(e => {
     console.log(e);
   });
+
+  return firstData;
+}
+
+function addChatRoomCards(chats) {
+  let chatRoomsDiv = document.getElementById('chat-room-template');
+
+  for (let chatRoom of chats || []) {
+    const chatRoomCard = chatRoomsDiv.content.cloneNode(true);
+    chatRoomCard.querySelector('.chat-room-name').textContent = chatRoom.display_name;
+    chatRoomCard.querySelector('.profile-pic').src = chatRoom.pfp_link == 'n' ? '/defaultpfp.png' : chatRoom.pfp_link;
+    chatRoomCard.querySelector('.chat-room-card').setAttribute('data-room-id', chatRoom.chat_room_id);
+    chatRoomsContainer.appendChild(chatRoomCard);
+
+    userChatsWith.push(chatRoom.room_member_id);
+  }
 }
 
 function fillNavbar(user) {
   const display = (user.display_name || user.id || '').trim();
   const avatar = (user.images && user.images.length > 0) ? user.images[0].url : '/defaultpfp.png';
 
+  localStorage.setItem('vm_id', user.id);
   localStorage.setItem('vm_display_name', display);
   if (avatar) localStorage.setItem('vm_avatar_url', avatar);
 
@@ -279,7 +280,6 @@ async function loadAndRenderPlaylists() {
     method: 'GET',
     headers: { Authorization: 'Bearer ' + currentToken.access_token },
   }).then(playlistsData => {
-    console.log(playlistsData);
     if (playlistsData.items.length == 0) throw new Error('No playlists found');
 
     let playlistDiv = document.getElementById('playlist-template');
@@ -301,15 +301,31 @@ async function loadAndRenderPlaylists() {
   });
 }
 
+var pid = "";
 // when you click on a playlist card
 document.getElementById('spotify-playlist-column').addEventListener('click', (e) => {
   const card = e.target.closest('.card');
   if (!card) return;
 
-  const pid = card.getAttribute('data-playlist-id');
+  pid = card.getAttribute('data-playlist-id');
   // maybe add a "selected" class so that it looks different
   console.log(pid);
 }, false);
+
+document.getElementById('find-match-button').addEventListener('click', async () => {
+  if (!pid) {
+    alert('Please select a playlist first!');
+  } else {
+    await fetchJson(`https://api.spotify.com/v1/playlists/${pid}/tracks?fields=items%28track%28artists%28name%29%29%29limit=50`, {
+      method: 'GET',
+      headers: { Authorization: 'Bearer ' + currentToken.access_token },
+    }).then(rawArtists => {
+      // casting to set removes duplicates
+      let artists = new Set(rawArtists.items.map(item => item.track.artists.map(a => a.name)).flat());
+      socket.emit('search_for_room', [...artists]);
+    });
+  }
+});
 
 // when you click on a chat room card
 chatRoomsContainer.addEventListener('click', (e) => {
@@ -329,7 +345,47 @@ chatRoomsContainer.addEventListener('click', (e) => {
     const user = await getUserData();
     fillNavbar(user);
 
-    await getAccountOrCreate(user);
+    const firstRoom = await getAccountOrCreate(user);
+    
+    socket = io(SOCKET_URL, {
+      query: { 
+        userId: user.id,
+        existingChats: JSON.stringify(userChatsWith),
+        userPfp: localStorage.getItem('vm_avatar_url'),
+        userDisplay: localStorage.getItem('vm_display_name')
+      }
+    });
+
+    socket.on("load_messages", (rows = []) => {
+      clearMessages();
+      rows.forEach(r => {
+        const name = r.username ?? r.user ?? "user";
+        const text = r.message  ?? r.msg  ?? "";
+        const isMe = name === getChatUsername();
+        appendMessage(`${name}: ${text}`, isMe);
+      });
+    });
+
+    socket.off('receive_message');
+
+    socket.on('receive_message', (data) => {
+      if (data.room && data.room !== currentRoom) return;
+      const mine = data.user === getChatUsername();
+      if (!mine) addMessage({ text: data.msg, who: 'them', user: data.user, timestamp: data.timestamp || Date.now() });
+    });
+
+    socket.on('matched_room', (data) => {
+      console.log('matched room');
+      if (getUserId() == data.user1) {
+        addChatRoomCards([{ display_name: data.user2display, pfp_link: data.user2pfp, chat_room_id: data.room_id }]);
+        joinRoom(data.room_id, data.user2display);
+      } else {
+        addChatRoomCards([{ display_name: data.user1display, pfp_link: data.user1pfp, chat_room_id: data.room_id }]);
+        joinRoom(data.room_id, data.user1display);
+      }
+    });
+
+    joinRoom(firstRoom['id'], firstRoom['display_name']);
 
     await loadAndRenderPlaylists();
   } catch (e) {
