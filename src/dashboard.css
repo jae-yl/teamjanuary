@@ -11,77 +11,88 @@
   --border: #222;
 }
 
+* {
+  box-sizing: border-box;
+}
+
 body {
   margin: 0;
   font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
   color: var(--text);
-
   background:
-    radial-gradient(1000px 600px at 70% 20%, rgba(29, 185, 84, 0.08), transparent 70%),
-    linear-gradient(180deg, #191414 0%, #0f0f0f 50%, #000000 100%);
+    radial-gradient(1000px 600px at 70% 20%, rgba(29, 185, 84, .08), transparent 70%),
+    linear-gradient(180deg, #191414 0%, #0f0f0f 50%, #000 100%);
   min-height: 100vh;
 }
 
-/* Navbar Component */
+/* Navbar */
 .nav {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 20px 20px;
+  padding: 16px 20px;
   background: var(--spotify-black);
   border-bottom: 1px solid var(--border);
 }
 
 .logo {
   font-size: 24px;
-  font-weight: bold;
-  padding-left: 20px;
-  color: var(--spotify-green-light)
+  font-weight: 700;
+  color: var(--spotify-green-light);
+}
+
+.nav-links {
+  list-style: none;
+  display: flex;
+  gap: 16px;
+  margin: 0;
+  padding: 0;
+}
+
+.profile {
+  display: flex;
+  gap: 10px;
+  align-items: center;
 }
 
 .profile-pic {
   width: 32px;
   height: 32px;
   border-radius: 50%;
+  object-fit: cover;
 }
 
 #profile-name {
-  color: var(--spotify-gray-light)
+  color: var(--spotify-gray-light);
+}
+
+.btn {
+  background: transparent;
+  border: 1px solid #2a2a2a;
+  color: var(--text);
+  padding: 8px 12px;
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.btn:hover {
+  border-color: #3a3a3a;
 }
 
 .fas.fa-sign-out-alt {
-  color:white;
-  font-size:20px;
+  color: #fff;
+  font-size: 18px;
 }
 
-.nav-links {
-  list-style: none;
-  display: flex;
-  gap: 20px;
-  margin-left: auto;
-}
-
-.nav-links li a {
-  color: var(--text);
-  text-decoration: none;
-  font-size: 16px;
-  transition: color 0.3s ease;
-}
-
-.nav-links li a:hover {
-  color: var(--spotify-green-light);
-  opacity: 1;
-}
-
-/* Main dashboard body */
-/* [spotify] [chat] [chatrooms] */
+/* Layout: [Left: Spotify] [Middle: Chat] [Right: Rooms] */
 .dashboard-container {
   display: grid;
-  grid-template-columns: 1fr 1.6fr 1fr;
+  grid-template-columns: 1.1fr 1.4fr 1fr;
   gap: 16px;
   padding: 16px;
-  max-height: calc(100vh - 95px);
+  max-width: 1400px;
   margin: 0 auto;
+  height: calc(100vh - 70px);
 }
 
 #spotify-playlist-column,
@@ -90,42 +101,150 @@ body {
   background: var(--spotify-dark);
   border: 1px solid var(--border);
   border-radius: 16px;
-  padding: 14px;
-  min-height: 70vh;
-  backdrop-filter: blur(6px);
-  max-height: calc(100vh - 125px);
-}
-
-#spotify-playlist {
-  max-height: calc(100% - 20px);
-  overflow-y: auto;
-}
-
-.main-chat-window {
-  padding: 0px;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  /* enable children to flex/scroll */
 }
 
+/* Headers */
 .spotify-playlist-header,
-.chat__title,
-.chat-room-header {
-  margin: 6px 2px 12px;
+.collaborative-playlist-header,
+.chat-room-header,
+.chat__title {
+  margin: 0;
+  padding: 14px 16px;
   font-size: 16px;
   font-weight: 600;
   color: var(--spotify-gray-light);
+  border-bottom: 1px solid #242424;
+  /* underline header */
 }
 
-.chat-room-card {
-  background: var(--spotify-mid);
-  border: 1px solid #242424;
-  border-radius: 12px;
-  padding: 12px;
-  margin-bottom: 10px;
+/* LEFT: Spotify playlists + Collaborative */
+#find-match-button {
+  margin: 12px 16px 0;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid #2a2a2a;
+  background: #0f0f0f;
   color: var(--text);
   cursor: pointer;
 }
 
-/* Chat Shell */
+#find-match-button:hover {
+  border-color: #3a3a3a;
+}
+
+#spotify-playlist {
+  padding: 12px 12px 4px;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+/* Playlist cards (template) */
+.playlist-card {
+  background: #0f0f0f;
+  border: 1px solid #242424;
+  border-radius: 12px;
+  padding: 8px;
+  cursor: pointer;
+  transition: border-color .15s ease, transform .05s ease;
+}
+
+.playlist-card:hover {
+  border-color: #2f2f2f;
+}
+
+.playlist-card.selected {
+  outline: 2px solid var(--spotify-green);
+}
+
+.card-image {
+  border-radius: 12px;
+  background: #111;
+}
+
+.card-title {
+  margin: 0;
+  color: #111;
+}
+
+/* title is inside a white bootstrap card body; text-black class in HTML */
+
+/* Collaborative section (lives under playlists in left column) */
+.collaborative-playlist-section {
+  margin: 12px;
+  border: 1px dashed #2a2a2a;
+  border-radius: 12px;
+}
+
+#collaborative-playlist-container {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+#collab-playlist-display a {
+  color: var(--spotify-green-light);
+  text-decoration: none;
+}
+
+#collab-playlist-display a:hover {
+  text-decoration: underline;
+}
+
+#collab-playlist-feedback,
+#copy-link-feedback {
+  color: var(--spotify-gray-light);
+  font-size: 13px;
+}
+
+.collab-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+#spotify-song-url {
+  flex: 1 1 240px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid #2a2a2a;
+  background: #0f0f0f;
+  color: var(--text);
+}
+
+#add-song-btn,
+#create-collab-playlist-btn,
+#copy-collab-link-btn {
+  padding: 8px 12px;
+}
+
+#collaborative-song-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+#collaborative-song-list li {
+  background: #0f0f0f;
+  border: 1px solid #242424;
+  border-radius: 10px;
+  padding: 8px 10px;
+  color: var(--spotify-gray-light);
+}
+
+/* MIDDLE: Chat */
+.main-chat-window {
+  padding: 0;
+}
+
 .chat {
   display: grid;
   grid-template-rows: auto 1fr auto;
@@ -133,7 +252,6 @@ body {
   background: var(--spotify-dark);
 }
 
-/* Header */
 .chat__header {
   display: flex;
   align-items: center;
@@ -143,15 +261,69 @@ body {
   border-bottom: 1px solid var(--border);
 }
 
-/* Chat Input */
-/* Composer */
+.chat__messages {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.msg {
+  display: flex;
+  flex-direction: column;
+  max-width: 75%;
+}
+
+.msg--them {
+  align-self: flex-start;
+}
+
+.msg--me {
+  align-self: flex-end;
+}
+
+.msg__bubble {
+  display: inline-block;
+  padding: 10px 14px;
+  border-radius: 18px;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-word;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, .25);
+}
+
+.msg--them .msg__bubble {
+  background: #2a2a2a;
+  color: var(--spotify-gray-light);
+  border: 1px solid #2a2a2a;
+  border-bottom-left-radius: 6px;
+  border-bottom-right-radius: 18px;
+}
+
+.msg--me .msg__bubble {
+  background: var(--spotify-green);
+  color: #0b0b0b;
+  border: 1px solid #17a34a;
+  border-bottom-right-radius: 6px;
+  border-bottom-left-radius: 18px;
+}
+
+.msg__meta {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--spotify-gray-light);
+  text-align: right;
+}
+
 .chat__composer {
   display: grid;
   grid-template-columns: 1fr auto;
   gap: 8px;
   padding: 12px;
-  border-top: 1px solid var(--border);
   background: var(--spotify-black);
+  border-top: 1px solid var(--border);
 }
 
 .chat__input {
@@ -178,7 +350,7 @@ body {
   border: 0;
   background: var(--spotify-green);
   color: #0b0b0b;
-  font-weight: bold;
+  font-weight: 700;
   cursor: pointer;
 }
 
@@ -190,64 +362,71 @@ body {
   transform: translateY(1px);
 }
 
-/* User chats */
-.chat__messages {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 14px;
+/* RIGHT: Chat rooms (template-based) */
+#chat-rooms-container {
+  overflow: hidden;
+}
+
+#chat-rooms {
+  padding: 12px;
   overflow-y: auto;
-}
-
-.chat__messages .msg {
+  min-height: 0;
   display: flex;
   flex-direction: column;
-  align-self: flex-start;
-  max-width: 75%;
-  margin: 0 12px;
+  gap: 10px;
 }
 
-.chat__messages .msg.msg--them {
-  align-items: flex-start;
+#chat-rooms .chat-room-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--spotify-mid);
+  border: 1px solid #242424;
+  border-radius: 12px;
+  padding: 10px 12px;
+  color: var(--text);
+  cursor: pointer;
+  transition: border-color .15s ease, background .15s ease;
 }
 
-.chat__messages .msg.msg--me {
-  align-self: flex-end;
-  align-items: flex-end;
-  margin-right: 12px;
+#chat-rooms .chat-room-card:hover {
+  border-color: #2f2f2f;
+  background: #1a1a1a;
 }
 
-.chat__messages .msg__bubble {
-  display: inline-block;
-  padding: 10px 14px;
-  border-radius: 18px;
-  line-height: 1.4;
-  max-width: 100%;
-  white-space: pre-wrap;
-  word-break: break-word;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, .25);
+#chat-rooms .chat-room-card.active {
+  outline: 2px solid var(--spotify-green);
 }
 
-.chat__messages .msg.msg--them .msg__bubble {
-  background: #2a2a2a;
+#chat-rooms .chat-room-card .profile-pic {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+.chat-room-card {
+  background: var(--spotify-mid);
+  border: 1px solid #242424;
+  border-radius: 12px;
+  padding: 12px;
+  margin-bottom: 10px;
+  color: var(--text);
+  cursor: pointer;
+}
+#chat-rooms .chat-room-name {
   color: var(--spotify-gray-light);
-  border: 1px solid #2a2a2a;
-  border-bottom-left-radius: 6px;
-  border-bottom-right-radius: 18px;
-  text-align: left;
 }
 
-.chat__messages .msg.msg--me .msg__bubble {
-  background: var(--spotify-green);
-  color: #0b0b0b;
-  border: 1px solid #17a34a;
-  border-bottom-right-radius: 6px;
-  border-bottom-left-radius: 18px;
-  text-align: left;
-}
+/* Responsive */
+@media (max-width: 1100px) {
+  .dashboard-container {
+    grid-template-columns: 1fr;
+    height: auto;
+  }
 
-.chat__messages .msg__meta {
-  margin-top: 6px;
-  font-size: 12px;
-  color: var(--spotify-gray-light);
+  #spotify-playlist-column,
+  .main-chat-window,
+  #chat-rooms-container {
+    min-height: 40vh;
+  }
 }
