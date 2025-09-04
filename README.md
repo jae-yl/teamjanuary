@@ -6,3 +6,5 @@ CS-375 Team January Project
 2. ```npm i```
 3. ```npm run dev```
 
+*Run the server with*
+```node server.js```
