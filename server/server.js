@@ -143,7 +143,7 @@ app.post("/findmatch", (req, res) => {
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: ["http://127.0.0.1:5173", "http://127.0.0.1:3000"],
+    origin: ["http://0.0.0.0:5173", "http://0.0.0.0:3000"],
     methods: ["GET", "POST"]
   }
 });
