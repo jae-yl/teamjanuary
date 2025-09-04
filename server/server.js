@@ -9,8 +9,8 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 import { Pool } from 'pg';
-const dburl = "postgres://postgres:Mt72BPTrAfHC2gU@vibematchdb.fly.dev:5432/vibematch?options";
-const pool = new Pool({ connectionString: dburl });
+//const dburl = "postgres://postgres:Mt72BPTrAfHC2gU@vibematchdb.fly.dev:5432/vibematch?options";
+const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
 import connectPgSimple from 'connect-pg-simple';
 const pgSession = connectPgSimple(session);
