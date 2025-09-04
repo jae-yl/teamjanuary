@@ -7,7 +7,8 @@ import cors from 'cors';
 import { Server } from 'socket.io';
 
 import { Pool } from 'pg';
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+const dburl = "postgres://postgres:Mt72BPTrAfHC2gU@vibematchdb.fly.dev:5432/vibematch?options";
+const pool = new Pool({ connectionString: dburl });
 
 import connectPgSimple from 'connect-pg-simple';
 const pgSession = connectPgSimple(session);
@@ -143,7 +144,7 @@ app.post("/findmatch", (req, res) => {
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: ["http://0.0.0.0:5173", "http://0.0.0.0:3000"],
+    origin: ["http://127.0.0.1:5173", "http://127.0.0.1:5173"],
     methods: ["GET", "POST"]
   }
 });
