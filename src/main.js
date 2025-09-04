@@ -98,7 +98,7 @@ const signOutBtn = document.getElementById('signout-btn');
 
 signOutBtn?.addEventListener('click', async () => {
   try {
-    const r = await fetch(`${API}/logout`, {
+    const r = await fetch(`/logout`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include'
@@ -233,7 +233,7 @@ async function getAccountOrCreate(user) {
 
   // create if needed
   if (!v.exists) {
-    const accRes = await fetch(`${API}/createaccount`, {
+    const accRes = await fetch(`/createaccount`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -249,7 +249,7 @@ async function getAccountOrCreate(user) {
 
   // login + get chats
   const firstData = {};
-  await fetch(`${API}/login`, {
+  await fetch(`/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'include',
@@ -443,9 +443,9 @@ copyCollabLinkBtn?.addEventListener('click', copyCollaborativeLink);
     const firstRoom = await getAccountOrCreate(user);
 
     // set up socket w/ metadata for matching
-    socket = io(API_BASE || undefined, {
+    socket = io({
       path: '/socket.io',
-      transports: ['websocket'],
+      //transports: ['websocket'],
       withCredentials: true,
       query: {
         userId: user.id,

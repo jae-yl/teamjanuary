@@ -17,17 +17,22 @@ const pgSession = connectPgSimple(session);
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+const isProd = process.env.NODE_ENV === 'production';
+
+const ORIGIN_DEV  = 'http://localhost:5173';
+const ORIGIN_PROD = process.env.PUBLIC_ORIGIN || 'https://vibematch.fly.dev';
+const ALLOWED_ORIGINS = isProd ? [ORIGIN_PROD] : [ORIGIN_DEV];
+
 const app = express();
+
+if (isProd) app.set('trust proxy', 1);
+
 app.use(express.static(path.join(__dirname, '../dist')));
 app.use(express.json());
 
-app.get('/dashboard.html', (req, res) => {
-    res.redirect(path.join(__dirname, '../dist/dashboard.html'));
-});
-
 // CORS
 app.use(cors({
-  origin: ["http://0.0.0.0:5173"],
+  origin: ALLOWED_ORIGINS,
   methods: ["GET", "POST"],
   credentials: true
 }));
@@ -38,19 +43,16 @@ app.use(session({
     pool,
     tableName: 'session'
   }),
-  secret: env.SESSION_SECRET,
+  secret: process.env.SESSION_SECRET || env.SESSION_SECRET,
   resave: false,
   saveUninitialized: false,
   cookie: {
     httpOnly: true,
-    secure: false,
+    secure: isProd,
+    sameSite: 'lax',
     maxAge: 1000 * 60 * 60 * 12
   }
 }));
-
-app.listen(3000, '0.0.0.0', () => {
-  console.log('Server is running on http://0.0.0.0:3000');
-});
 
 // ──────────────── ROUTES ────────────────
 
@@ -151,9 +153,11 @@ app.post("/findmatch", (req, res) => {
 
 const server = http.createServer(app);
 const io = new Server(server, {
+  path: '/socket.io',
   cors: {
-    origin: ["http://0.0.0.0:5173", "http://0.0.0.0:3000"],
-    methods: ["GET", "POST"]
+    origin: ALLOWED_ORIGINS,
+    methods: ["GET", "POST"],
+    credentials: true
   }
 });
 
@@ -350,6 +354,12 @@ io.on("connection", (socket) => {
 });
 
 // ──────────────── SERVER (sockets) ────────────────
-server.listen(3001, '0.0.0.0', () => {
+/*server.listen(3001, '0.0.0.0', () => {
   console.log("Socket server running at http://0.0.0.0:3001");
+});*/
+
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, '0.0.0.0', () => {
+  console.log(`Server is running on http://0.0.0.0:${PORT}`);
 });
+
