@@ -5,6 +5,8 @@ import env from '../env.json' with { type: 'json' };
 import http from 'http';
 import cors from 'cors';
 import { Server } from 'socket.io';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
 import { Pool } from 'pg';
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
@@ -12,13 +14,20 @@ const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 import connectPgSimple from 'connect-pg-simple';
 const pgSession = connectPgSimple(session);
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 const app = express();
-app.use(express.static("src"));
+app.use(express.static(path.join(__dirname, '../dist')));
 app.use(express.json());
+
+app.get('/dashboard.html', (req, res) => {
+    res.redirect(path.join(__dirname, '../dist/dashboard.html'));
+});
 
 // CORS
 app.use(cors({
-  origin: ["http://127.0.0.1:5173"],
+  origin: ["http://0.0.0.0:5173"],
   methods: ["GET", "POST"],
   credentials: true
 }));
@@ -39,8 +48,8 @@ app.use(session({
   }
 }));
 
-app.listen(3000, '127.0.0.1', () => {
-  console.log('Server is running on http://127.0.0.1:3000');
+app.listen(3000, '0.0.0.0', () => {
+  console.log('Server is running on http://0.0.0.0:3000');
 });
 
 // ──────────────── ROUTES ────────────────
@@ -341,6 +350,6 @@ io.on("connection", (socket) => {
 });
 
 // ──────────────── SERVER (sockets) ────────────────
-server.listen(3001, '127.0.0.1', () => {
-  console.log("Socket server running at http://127.0.0.1:3001");
+server.listen(3001, '0.0.0.0', () => {
+  console.log("Socket server running at http://0.0.0.0:3001");
 });
