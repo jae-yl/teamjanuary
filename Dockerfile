@@ -7,11 +7,12 @@ FROM node:${NODE_VERSION}-slim AS base
 LABEL fly_launch_runtime="Vite"
 
 # Vite app lives here
-WORKDIR /server
+WORKDIR /app
 
 # Set production environment
 ENV NODE_ENV="production"
 
+COPY package*.json ./
 
 # Throw-away build stage to reduce size of final image
 FROM base AS build
@@ -35,11 +36,12 @@ RUN npm prune --omit=dev
 
 
 # Final stage for app image
-FROM nginx
+#FROM nginx
 
 # Copy built application
 #COPY --from=build /app/dist /usr/share/nginx/html
 
 # Start the server by default, this can be overwritten at runtime
-EXPOSE 80
-CMD [ "/usr/sbin/nginx", "-g", "daemon off;" ]
+EXPOSE 3000
+CMD ["node", "server/server.js"]
+#CMD [ "/usr/sbin/nginx", "-g", "daemon off;" ]

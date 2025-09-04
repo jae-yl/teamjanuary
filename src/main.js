@@ -3,7 +3,8 @@ import 'bootstrap/dist/js/bootstrap.bundle.min.js';
 import { io } from 'socket.io-client';
 
 // ===== Socket base =====
-const SOCKET_URL = window.SOCKET_URL || 'http://127.0.0.1:3001';
+//const SOCKET_URL = window.SOCKET_URL || 'http://0.0.0.0:3001';
+const API_BASE = import.meta.env.VITE_API_BASE || '';
 var socket;
 
 // ===== Chat DOM =====
@@ -90,14 +91,14 @@ input?.addEventListener('keydown', (e) => {
 });
 
 // ===== Navbar / Auth / Spotify =====
-const API = 'http://127.0.0.1:3000';
+const API = 'http://0.0.0.0:3000';
 const profilePic = document.getElementById('profile-pic');
 const profileName = document.getElementById('profile-name');
 const signOutBtn = document.getElementById('signout-btn');
 
 signOutBtn?.addEventListener('click', async () => {
   try {
-    const r = await fetch(`${API}/logout`, {
+    const r = await fetch(`/logout`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include'
@@ -115,7 +116,7 @@ signOutBtn?.addEventListener('click', async () => {
 });
 
 const clientId = '4a01c36424064f4fb31bf5d5b586eb1f';
-const redirectUrl = 'http://127.0.0.1:5173/dashboard.html';
+const redirectUrl = 'https://vibematch.fly.dev/dashboard.html';
 const tokenEndpoint = 'https://accounts.spotify.com/api/token';
 
 const currentToken = {
@@ -222,7 +223,7 @@ function addChatRoomCards(chats) {
 
 async function getAccountOrCreate(user) {
   // verify
-  const verify = await fetch(`${API}/verifyaccount`, {
+  const verify = await fetch(`/verifyaccount`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ id: user.id })
@@ -232,7 +233,7 @@ async function getAccountOrCreate(user) {
 
   // create if needed
   if (!v.exists) {
-    const accRes = await fetch(`${API}/createaccount`, {
+    const accRes = await fetch(`/createaccount`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -248,7 +249,7 @@ async function getAccountOrCreate(user) {
 
   // login + get chats
   const firstData = {};
-  await fetch(`${API}/login`, {
+  await fetch(`/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'include',
@@ -431,7 +432,7 @@ copyCollabLinkBtn?.addEventListener('click', copyCollaborativeLink);
 // ===== Init =====
 (async function init() {
   if (!currentToken.access_token) {
-    window.location.replace('http://127.0.0.1:5173');
+    window.location.replace('/index.html');
     return;
   }
 
@@ -442,7 +443,10 @@ copyCollabLinkBtn?.addEventListener('click', copyCollaborativeLink);
     const firstRoom = await getAccountOrCreate(user);
 
     // set up socket w/ metadata for matching
-    socket = io(SOCKET_URL, {
+    socket = io({
+      path: '/socket.io',
+      //transports: ['websocket'],
+      withCredentials: true,
       query: {
         userId: user.id,
         existingChats: JSON.stringify(userChatsWith),

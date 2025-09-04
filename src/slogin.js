@@ -1,5 +1,5 @@
 const clientId = '4a01c36424064f4fb31bf5d5b586eb1f';
-const redirectUrl = 'http://127.0.0.1:5173/dashboard.html';
+const redirectUrl = 'https://vibematch.fly.dev/dashboard.html';
 
 const authorizationEndpoint = "https://accounts.spotify.com/authorize";
 const tokenEndpoint = "https://accounts.spotify.com/api/token";
@@ -35,3 +35,5 @@ async function redirectToSpotifyAuthorize() {
     authUrl.search = new URLSearchParams(params).toString();
     window.location.href = authUrl.toString(); // Redirect the user to the authorization server for login
 }
+
+export { redirectToSpotifyAuthorize };
